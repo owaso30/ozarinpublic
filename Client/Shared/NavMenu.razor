@@ -1,0 +1,64 @@
+﻿@inject NavigationManager NavigationManager
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">ozarin</a>
+        <label style="font-size:medium;color:white">
+            @strText
+        </label>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> ホーム
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="scoreboard">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> スコアボード
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="grade">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> 戦績表
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="dataedit">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> データ修正
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="user">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> メンバー管理
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="specifiedcommercialtransactions">
+                <span class="oi oi-link-broken" aria-hidden="true"></span> 特定商取引法に基づく表記
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <LoginDisplay />
+        </div>
+    </nav>
+</div>
+
+@code {
+    private string? strText { get; set; } = "四麻スコア集計アプリ";
+
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

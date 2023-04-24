@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>ozarin</title>
+    <base href="/" />
+    <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="css/app.css" rel="stylesheet" />
+    <link href="css/style.css" rel="stylesheet" />
+    <link href="Ozarin.Client.styles.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="_content/BlazorStrap/blazorStrap.js"></script>
+</head>
+
+<body class="home">
+    <div id="app">Loading...</div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+    <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
+    <script src="_content/Microsoft.Authentication.WebAssembly.Msal/AuthenticationService.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        window.jsFunctions = {
+            alert: function (msg) {
+                alert(msg);
+            },
+            confirm: function (msg) {
+                return confirm(msg) == false ? 0 : 1;
+            },
+        }
+    </script>
+    <script type="text/javascript">
+        window.onload = function () {
+            var tableElem = document.getElementById('table_01');
+            if (tableElem != null) {
+                var rowElems = tableElem.rows;
+                var len_c = table_01.rows[0].cells.length;
+                var moji = "goukei";
+                var tmp = document.getElementsByClassName("hoge");
+                for (j = 0; j < len_c - 1; j++) {
+                    var sum = new Array(j);
+                    sum[j] = 0;
+                    for (i = 1, len_r = rowElems.length - 3; i < len_r; i++) {
+                        if (rowElems[i].cells[j + 1].innerText !== "") {
+                            sum[j] += parseInt(rowElems[i].cells[j + 1].innerText);
+                        }
+                    }
+                    tmp[j].setAttribute("id", moji + j);
+                    document.getElementById('goukei' + j).innerText = sum[j];
+                }
+            }
+        }
+    </script>
+    <!--メニューの開閉処理条件設定　800px以下-->
+    <script>
+        if (OCwindowWidth() <= 800) {
+            open_close("menubar_hdr", "menubar-s");
+        }
+    </script>
+    <!--<script type="text/javascript">
+        window.offload = function () {
+            var tableElem = document.getElementById('table_01');
+            var len_c = tableElem.rows[0].cells.length;
+            var moji = "goukei";
+            var tmp = document.getElementsByClassName("hoge");
+            for (j = 0; j < len_c; j++) {
+                var sum = new Array(j);
+                sum[j] = "";
+                tmp[j].setAttribute("id", moji + j);
+                document.getElementById('goukei' + j).innerText = sum[j];
+            }
+        }
+    </script>-->
+</body>
+
+</html>

@@ -1,0 +1,204 @@
+﻿@page "/user"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject IJSRuntime JSRuntime ;
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>ozarinUser</PageTitle>
+
+<div style="margin-bottom:65px"></div>
+@if (IsLoadingOverlay)
+{
+	<div id="loading">
+		<div class="w-100 d-flex justify-content-center align-items-center">
+			<div class="spinner-border text-primary spinner-custom" role="status"></div>
+		</div>
+	</div>
+}
+else
+{
+	<div class="smart_note">
+		<div style="margin-top:15px;height:307px;overflow-y:auto;border:1px solid black">
+			<table class="table table-sm" style="border-collapse:separate;font-size:small;background-color:white">
+				<thead>
+					<tr style="font-size:larger;position:sticky;top:0;background-color:khaki">
+						<th style="width:100px;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">メンバーID</th>
+						<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">名前</th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var it in t_users)
+					{
+						<tr @onclick="e => onSelected(it)" style="@(it == t_user ? "background:orange" : "");font-size:larger">
+							<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserId</td>
+							<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserName</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			@Message
+		</div>
+		<div style="margin-top:15px">
+			<div class="form-group">
+				<label for="userid" class="fw-bold">メンバーID</label>
+				<input style="font-size:larger" type="number" id="userid" readonly="readonly" @bind="t_user.UserId" class="form-control" />
+			</div>
+			<div class="form-group">
+				<label for="name" class="fw-bold">名前</label>
+				<input style="font-size:larger" type="text" id="name" @bind="t_user.UserName" class="form-control" />
+			</div>
+			<button style="margin-top:10px;width:140px" class="btn btn-primary" @onclick="onUpdate">メンバー登録</button>
+			<button style="margin-top:10px;width:140px" class="btn btn-secondary" @onclick="onDelete">メンバー削除</button>
+			<button style="margin-top:10px" class="btn btn-link" @onclick="onCreate">新規追加フォームへ</button>
+			<div style="margin-top:5px;margin-bottom:20px;color:red;font-size:small">
+				※メンバーIDが0の状態で名前を入力し、登録ボタンを押すと新規データが追加されます。0でない場合は名前の変更ができます。
+			</div>
+		</div>
+	</div>
+
+	<div class="smart">
+		<div style="margin-top:20px;height:357px;overflow-y:auto;border:1px solid black">
+			<table class="table table-sm" style="border-collapse:separate;background-color:white">
+				<thead>
+					<tr style="font-size:larger;position:sticky;top:0;background-color:khaki">
+						<th style="width:150px;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">メンバーID</th>
+						<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">名前</th>
+					</tr>
+				</thead>
+				<tbody>
+					@foreach (var it in t_users)
+					{
+						<tr @onclick="e => onSelected(it)" style="@(it == t_user ? "background:orange" : "");font-size:larger">
+							<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserId</td>
+							<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserName</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		<div style="margin-top:20px">
+			<div class="form-group">
+				<label for="userid" class="fw-bold">メンバーID</label>
+				<input style="font-size:larger" type="number" id="userid" readonly="readonly" @bind="t_user.UserId" class="form-control" />
+			</div>
+			<div class="form-group">
+				<label for="name" class="fw-bold">名前（5文字以内）</label>
+				<input style="font-size:larger" type="text" id="name" @bind="t_user.UserName" class="form-control" />
+			</div>
+			<button style="margin-top:10px;width:140px" class="btn btn-primary" @onclick="onUpdate">メンバー登録</button>
+			<button style="margin-top:10px;width:140px" class="btn btn-secondary" @onclick="onDelete">メンバー削除</button>
+			<button style="margin-top:20px" class="btn btn-link" @onclick="onCreate">新規追加フォームへ</button>
+			<div style="margin-top:20px;color:red">
+				※メンバーIDが0の状態で名前を入力し、登録ボタンを押すと新規データが追加されます。0でない場合は名前の変更ができます。
+			</div>
+		</div>
+		@Message
+	</div>
+}
+
+@code {
+	private bool IsLoadingOverlay = false;
+	private string Message { get; set; } = "";
+	private List<TUser> t_users { get; set; } = new List<TUser>();
+	private TUser t_user { get; set; } = new TUser();
+	private List<TTable> t_tables { get; set; } = new List<TTable>();
+	private List<TTrialSeat> t_trialseats { get; set; } = new List<TTrialSeat>();
+
+	protected override async Task OnInitializedAsync()
+	{
+		onSearch();
+	}
+	///検索
+	private async void onSearch()
+	{
+		IsLoadingOverlay = true;
+		await Task.Delay(1); // これをしないと、画面にスレッドが切り替わらず、オーバーレイが表示されない。StateHasChanged()でもだめ。
+
+		var response = await Http.PostAsJsonAsync($"subscriptioninfo-session/{"user"}", "");
+		string url = await response.Content.ReadAsStringAsync();
+		NavigationManager.NavigateTo(url);
+
+		t_users = await Http.GetFromJsonAsync<List<TUser>>("api/TUsers");
+		t_tables = await Http.GetFromJsonAsync<List<TTable>>("api/TTables");
+		t_trialseats = await Http.GetFromJsonAsync<List<TTrialSeat>>("api/TTrialSeats");
+		IsLoadingOverlay = false;
+		StateHasChanged();
+	}
+	///書籍を選択する
+	private async void onSelected(TUser b)
+	{
+		t_user = b;
+	}
+	///新規作成
+	private void onCreate()
+	{
+		t_user = new TUser();
+	}
+	///データ更新
+	private async void onUpdate()
+	{
+		if (t_user.UserId == 0)
+		{
+			// 新規作成
+			if (t_users.Count > 39)
+			{
+				await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "メンバー登録できる上限に達しており、追加のメンバー登録はできません");
+				return;
+			}
+			if (t_user.UserName.Length > 5)
+			{
+				await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "名前は5文字以内にしてください");
+				return;
+			}
+			if (t_users.Count == 0)
+			{
+				t_user.UserId = 1;
+			}
+			else
+			{
+				t_user.UserId = t_users.Max(a => a.UserId) + 1;
+			}
+			var res = await Http.PostAsJsonAsync("api/TUsers", t_user);
+			t_user = await res.Content.ReadFromJsonAsync<TUser>();
+		}
+		else
+		{
+			if (t_user.UserName.Length > 5)
+			{
+				await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "名前は5文字以内にしてください");
+				onSearch();
+				return;
+			}
+			// 更新処理
+			await Http.PutAsJsonAsync($"api/TUsers/{t_user.UserId}", t_user);
+		}
+		// リストを更新
+		onSearch();
+		await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "メンバーを新規登録または名前を変更しました");
+	}
+	///データ削除
+	private async void onDelete()
+	{
+		if (t_user.UserId == 0) return;
+		if (t_tables.Join(t_trialseats, t => t.TrialSeatId, s => s.TrialSeatId, (t, s) => new { t.TableId, s.UserId }).Where(a => a.UserId == t_user.UserId).Any())
+		{
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "対象のメンバー対局データが存在するので削除できません");
+			return;
+		}
+		if (t_trialseats.Where(a => a.UserId == t_user.UserId).Any())
+		{
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "対象のメンバーは対局表にメンバー登録されているので削除できません");
+			return;
+		}
+		if (await JSRuntime.InvokeAsync<int>(
+			"jsFunctions.confirm", "このメンバーを削除してもよろしいですか？") == 0) return;
+
+		await Http.DeleteAsync($"api/TUsers/{t_user.UserId}");
+		onSearch();
+		await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "メンバーを削除しました");
+		t_user.UserId = 0;
+		t_user.UserName = "";
+	}
+}

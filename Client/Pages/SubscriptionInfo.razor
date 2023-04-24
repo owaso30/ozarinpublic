@@ -1,0 +1,42 @@
+﻿@page "/subscription"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime;
+
+<PageTitle>ozarin</PageTitle>
+
+<div style="margin-bottom:55px"></div>
+<h5 style="margin-bottom:15px">当アプリは4人打ち麻雀専用スコア集計アプリです。ウェブブラウザのみでご利用いただくことができます。</h5>
+<b>＜対応している主な機能＞</b>
+<li>25,000スタート・30,000返し、20,000スタート・25,000返し</li>
+<li>ウマ5-10、ウマ10-20、ウマ10-30</li>
+<li>チップ</li>
+<li>焼き鳥</li>
+<li>飛び賞</li>
+<li>役満賞</li>
+<li>過去100試合のスコアデータの閲覧・編集が可能</li>
+<li>過去全試合の戦績表が閲覧可能（期間フィルター機能あり）</li>
+<li>ユーザー登録（40人まで）</li>
+<br />
+✅身内戦や常連相手との試合でご利用ください。<br />
+✅サービスをご利用いただくには、月額220円(税込み)の課金が必要です。<br />
+✅右上メニューの「My Subscription」にていつでも解約可能です。
+
+
+<div style="margin-top:20px"><button class="btn btn-primary" @onclick=@(async () => await Purchase())>お支払いページへ</button></div>
+
+
+@code {
+    private async ValueTask Purchase()
+    {
+        await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "お支払いページへ移動します。既に有効なアカウントが存在する場合はサービスのトップページへ移動します。");
+        var response = await Http.PostAsJsonAsync("create-checkout-session", "");
+        string url = await response.Content.ReadAsStringAsync();
+        NavigationManager.NavigateTo(url);
+    }
+}

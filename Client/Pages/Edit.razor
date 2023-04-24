@@ -1,0 +1,358 @@
+﻿@page "/dataedit"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject IJSRuntime JSRuntime;
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>ozarinDataedit</PageTitle>
+
+<div style="margin-bottom:55px"></div>
+@if (IsLoadingOverlay)
+{
+	<div id="loading">
+		<div class="w-100 d-flex justify-content-center align-items-center">
+			<div class="spinner-border text-primary spinner-custom" role="status"></div>
+		</div>
+	</div>
+}
+else
+{
+	// 条件付きフォントスタイルとして使用
+	string b = "font-weight:bold";
+	string br = "font-weight:bold;color:red";
+	string fontchips = b;
+	string fontyakitori = b;
+	string fonttobi = b;
+	string fontyakuman = b;
+	if (t_trials.Where(a => a.TrialId == t_trial.TrialId).Select(a => a.ChipsPrice).FirstOrDefault() > 0)
+	{
+		fontchips = br;
+	}
+	if (t_trials.Where(a => a.TrialId == t_trial.TrialId).Select(a => a.YakitoriPrice).FirstOrDefault() > 0)
+	{
+		fontyakitori = br;
+	}
+	if (t_trials.Where(a => a.TrialId == t_trial.TrialId).Select(a => a.TobiPrice).FirstOrDefault() > 0)
+	{
+		fonttobi = br;
+	}
+	if (t_trials.Where(a => a.TrialId == t_trial.TrialId).Select(a => a.YakumanPrice).FirstOrDefault() > 0)
+	{
+		fontyakuman = br;
+	}
+
+	<div class="smart_note">
+		<div style="margin-bottom:10px">
+			<label style="font-size:small">対局日時: </label>
+			<select style="background-color:honeydew" @bind="t_trial.TrialId" @oninput="onChange" class="form-control">
+				@foreach (var it in t_trials.OrderByDescending(m => m.TrialDateTime).Take(100))
+				{
+					<option value="@it.TrialId">@it.TrialDateTime.Value.ToString("yyyy/MM/dd(ddd) HH:mm")</option>
+				}
+			</select>
+		</div>
+
+		<div style="height:308px;overflow-y:auto;border:1px solid black">
+			<table class="table table-sm" style="table-layout:fixed;border-collapse:separate;font-size:x-small;background-color:white">
+				<tr align="center" style="position:sticky;top:0;background-color:khaki">
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">卓番</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">名前</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">着順</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">スコア</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">チップ<br>増減数</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">焼き鳥<br>得損数</th>
+				</tr>
+				@foreach (var it in t_tables.Join(t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new
+				{
+					t.TrialSeatId,
+					t.TrialId,
+					t.SeatId,
+					s?.UserName
+				}), u => u.TrialSeatId, k => k.TrialSeatId, (u, k) => new
+				{
+					u.TableId,
+					u.TrialSeatId,
+					k.TrialId,
+					k.SeatId,
+					k?.UserName,
+					u.TableCountId,
+					u.Rank,
+					u.Score,
+					u.ChipsChange,
+					u.YakitoriState,
+					u.TobiState,
+					u.YakumanState
+				}).Where(a => a.TrialId == t_trial.TrialId))
+				{
+					string? stripe = "";
+					if (it.TableCountId % 2 == 0)
+					{
+						stripe = "background:#F2F2F2";
+					}
+					<tr @onclick="e => onSelected(it.TableId, it.TrialSeatId, it.TableCountId, it.Rank, it.Score, it.ChipsChange, it.YakitoriState, it.TobiState, it.YakumanState)" align="center" style="@(it.TableId == t_table.TableId ? "background:orange" : stripe);font-size:larger">
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.TableCountId</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserName</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.Rank</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.Score</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.ChipsChange</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.YakitoriState</td>
+					</tr>
+				}
+			</table>
+		</div>
+
+		<table class="table" style="font-size:x-small;table-layout:fixed;margin-top:12px;border:1px solid black;background-color:lavenderblush">
+			<tr align="center">
+				<th>着順</th>
+				<th>スコア</th>
+				<th>チップ増減数</th>
+			</tr>
+			<tr align="center">
+				<td><input style="font-size:larger;background-color:white" type="number" @bind="t_table.Rank" class="form-control" /></td>
+				<td><input style="font-size:larger;background-color:white" type="number" @bind="t_table.Score" class="form-control" /></td>
+				<td><input style="font-size:larger;background-color:white" type="number" @bind="t_table.ChipsChange" class="form-control" /></td>
+			</tr>
+			<tr align="center">
+				<th>焼き鳥得損数</th>
+				<th>飛び賞得損数</th>
+				<th>役満賞得損数</th>
+			</tr>
+			<tr align="center">
+				<td><input style="font-size:larger;background-color:white" type="number" @bind="t_table.YakitoriState" class="form-control" /></td>
+				<td><input style="font-size:larger;background-color:white" type="number" @bind="t_table.TobiState" class="form-control" /></td>
+				<td><input style="font-size:larger;background-color:white" type="number" @bind="t_table.YakumanState" class="form-control" /></td>
+			</tr>
+		</table>
+
+		<div style="margin-bottom:30px">
+			<button style="width:140px" class="btn btn-primary" @onclick="onUpdate">データ修正</button>
+			<button style="width:140px" class="btn btn-secondary" @onclick="onDelete">卓削除</button>
+			@Message
+		</div>
+	</div>
+
+	<div class="smart">
+		<div style="margin-bottom:20px">
+			<label>対局日時: </label>
+			<select style="font-size:larger;background-color:honeydew" @bind="t_trial.TrialId" @oninput="onChange" class="form-control">
+				@foreach (var it in t_trials.OrderByDescending(m => m.TrialDateTime))
+				{
+					<option value="@it.TrialId">@it.TrialDateTime.Value.ToString("yyyy/MM/dd(ddd) HH:mm")</option>
+				}
+			</select>
+		</div>
+
+		<div style="height:455px;overflow-y:auto;border:1px solid black">
+			<table class="table table-sm" style="table-layout:fixed;border-collapse:separate;background-color:white">
+				<tr align="center" style="position:sticky;top:0;background-color:khaki">
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">卓番</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">名前</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">着順</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">スコア</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">チップ<br>増減数</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">焼き鳥<br>得損数</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">飛び賞<br>得損数</th>
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">役満賞<br>得損数</th>
+				</tr>
+				@foreach (var it in t_tables.Join(t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new
+				{
+					t.TrialSeatId,
+					t.TrialId,
+					t.SeatId,
+					s?.UserName
+				}), u => u.TrialSeatId, k => k.TrialSeatId, (u, k) => new
+				{
+					u.TableId,
+					u.TrialSeatId,
+					k.TrialId,
+					k.SeatId,
+					k?.UserName,
+					u.TableCountId,
+					u.Rank,
+					u.Score,
+					u.ChipsChange,
+					u.YakitoriState,
+					u.TobiState,
+					u.YakumanState
+				}).Where(a => a.TrialId == t_trial.TrialId))
+				{
+					string? stripe = "";
+					if (it.TableCountId % 2 == 0)
+					{
+						stripe = "background:#F2F2F2";
+					}
+					<tr @onclick="e => onSelected(it.TableId, it.TrialSeatId, it.TableCountId, it.Rank, it.Score, it.ChipsChange, it.YakitoriState, it.TobiState, it.YakumanState)" align="center" style="@(it.TableId == t_table.TableId ? "background:orange" : stripe);font-size:larger">
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.TableCountId</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserName</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.Rank</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.Score</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.ChipsChange</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.YakitoriState</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.TobiState</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.YakumanState</td>
+					</tr>
+				}
+			</table>
+		</div>
+
+		<table class="table" style="table-layout:fixed;margin-top:20px;border:1px solid black;background-color:lavenderblush">
+			<thead>
+				<tr align="center">
+					<th>着順</th>
+					<th>スコア</th>
+					<th>チップ増減数</th>
+					<th>焼き鳥得損数</th>
+					<th>飛び賞得損数</th>
+					<th>役満賞得損数</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr align="center">
+					<td><input style="font-size:larger" type="number" @bind="t_table.Rank" class="form-control" /></td>
+					<td><input style="font-size:larger" type="number" @bind="t_table.Score" class="form-control" /></td>
+					<td><input style="font-size:larger" type="number" @bind="t_table.ChipsChange" class="form-control" /></td>
+					<td><input style="font-size:larger" type="number" @bind="t_table.YakitoriState" class="form-control" /></td>
+					<td><input style="font-size:larger" type="number" @bind="t_table.TobiState" class="form-control" /></td>
+					<td><input style="font-size:larger" type="number" @bind="t_table.YakumanState" class="form-control" /></td>
+				</tr>
+			</tbody>
+		</table>
+
+		<div align="right" style="margin-top:20px;margin-bottom:20px">
+			<button style="width:140px" class="btn btn-primary" @onclick="onUpdate">データ修正</button>
+			<button style="width:140px" class="btn btn-secondary" @onclick="onDelete">卓削除</button>
+			@Message
+		</div>
+	</div>
+}
+
+@code {
+	private bool IsLoadingOverlay = false;
+	private TTrial t_trial { get; set; } = new TTrial();
+	private TTable t_table { get; set; } = new TTable();
+	private List<TTable>? t_tables { get; set; } = new List<TTable>();
+	private List<TTrial>? t_trials { get; set; } = new List<TTrial>();
+	private List<TTrialSeat>? t_trialseats = new List<TTrialSeat>();
+	private List<TUser>? t_users = new List<TUser>();
+	private string? Message { get; set; }
+	private DateTime? _trialdatetime { get; set; }
+	private string? _startreturn { get; set; }
+	private string? _bonusbyranking { get; set; }
+	private string? _calculationmethod { get; set; }
+	private int? _chipsprice { get; set; }
+	private int? _yakitoriprice { get; set; }
+	private int? _tobiprice { get; set; }
+	private int? _yakumanprice { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		onInit();
+	}
+	private async void onInit()
+	{
+		IsLoadingOverlay = true;
+		await Task.Delay(1); // これをしないと、画面にスレッドが切り替わらず、オーバーレイが表示されない。StateHasChanged()でもだめ。
+
+		var response = await Http.PostAsJsonAsync($"subscriptioninfo-session/{"dataedit"}", "");
+		string url = await response.Content.ReadAsStringAsync();
+		NavigationManager.NavigateTo(url);
+
+		t_tables = await Http.GetFromJsonAsync<List<TTable>>("api/TTables");
+		t_trials = await Http.GetFromJsonAsync<List<TTrial>>("api/TTrials");
+		t_trialseats = await Http.GetFromJsonAsync<List<TTrialSeat>>("api/TTrialSeats");
+		t_users = await Http.GetFromJsonAsync<List<TUser>>("api/TUsers");
+		if (t_trials.Any())
+		{
+			t_trial.TrialId = t_trials.OrderByDescending(m => m.TrialDateTime).Select(m => m.TrialId).FirstOrDefault();
+		}
+		IsLoadingOverlay = false;
+		StateHasChanged();
+	}
+	private async void Update()
+	{
+		t_tables = await Http.GetFromJsonAsync<List<TTable>>("api/TTables");
+		t_trials = await Http.GetFromJsonAsync<List<TTrial>>("api/TTrials");
+		t_trialseats = await Http.GetFromJsonAsync<List<TTrialSeat>>("api/TTrialSeats");
+		t_users = await Http.GetFromJsonAsync<List<TUser>>("api/TUsers");
+		StateHasChanged();
+	}
+	// 書籍を選択する
+	private void onSelected(int tid, int trstid, int tcid, int? rank, int? score, int? chips, int? yakitori, int? tobi, int? yakuman)
+	{
+		t_table.TableId = tid;
+		t_table.TrialSeatId = trstid;
+		t_table.TableCountId = tcid;
+		t_table.Rank = rank;
+		t_table.Score = score;
+		t_table.ChipsChange = chips;
+		t_table.YakitoriState = yakitori;
+		t_table.TobiState = tobi;
+		t_table.YakumanState = yakuman;
+	}
+	// テーブルデータ更新
+	private async void onUpdate()
+	{
+		// 更新処理
+		await Http.PutAsJsonAsync($"api/TTables/{t_table.TableId}", t_table);
+		// リストを更新
+		Update();
+		Message = "データを修正しました";
+	}
+	// 卓データ削除
+	private async void onDelete()
+	{
+		if (t_table.TableId == 0) return;
+		if (await JSRuntime.InvokeAsync<int>(
+			"jsFunctions.confirm", "選択したメンバーが属する卓を削除してもよろしいですか？") == 0) return;
+
+		var t_tables_delput = t_tables.Join(t_trialseats, u => u.TrialSeatId, k => k.TrialSeatId, (u, k) => new
+		{
+			u.TableId,
+			u.TrialSeatId,
+			k.TrialId,
+			u.TableCountId,
+			u.Rank,
+			u.Score,
+			u.ChipsChange,
+			u.YakitoriState,
+			u.TobiState,
+			u.YakumanState
+		}).Where(u => u.TrialId == t_trial.TrialId);
+
+		foreach (var it in t_tables_delput.Where(a => a.TableCountId == t_table.TableCountId))
+		{
+			await Http.DeleteAsync($"api/TTables/{it.TableId}");
+		}
+
+		foreach (var it in t_tables_delput)
+		{
+			if (it.TableCountId > t_table.TableCountId)
+			{
+				t_table.TableId = it.TableId;
+				t_table.TrialSeatId = it.TrialSeatId;
+				t_table.TableCountId = it.TableCountId - 1;
+				t_table.Rank = it.Rank;
+				t_table.Score = it.Score;
+				t_table.ChipsChange = it.ChipsChange;
+				t_table.YakitoriState = it.YakitoriState;
+				t_table.TobiState = it.TobiState;
+				t_table.YakumanState = it.YakumanState;
+				await Http.PutAsJsonAsync($"api/TTables/{t_table.TableId}", t_table);
+			}
+		}
+
+		Update();
+		Message = "卓を削除しました";
+	}
+	private void onChange()
+	{
+		t_table.TableId = 0;
+		t_table.TrialSeatId = 0;
+		t_table.TableCountId = 0;
+		t_table.Rank = null;
+		t_table.Score = null;
+		t_table.YakumanBonus = null;
+	}
+}

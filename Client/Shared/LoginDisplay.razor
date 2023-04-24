@@ -1,0 +1,30 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject SignOutSessionStateManager SignOutManager
+
+<AuthorizeView>
+    <Authorized>
+        @*Hello, @context.User.Identity?.Name!*@
+        <a href="" @onclick=@(async () => await Portal())>My subscription</a>
+        <a href="" @onclick="BeginLogout">Log out</a>
+    </Authorized>
+    <NotAuthorized>
+        <a href="authentication/login">Log in</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code{
+    private async Task BeginLogout(MouseEventArgs args)
+    {
+        await SignOutManager.SetSignOutState();
+        Navigation.NavigateTo("authentication/logout");
+    }
+    private async ValueTask Portal()
+    {
+        var response = await Http.PostAsJsonAsync("create-portal-session", "");
+        string url = await response.Content.ReadAsStringAsync();
+        Navigation.NavigateTo(url);
+    }
+}

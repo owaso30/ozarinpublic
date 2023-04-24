@@ -1,0 +1,320 @@
+﻿@page "/grade"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject IJSRuntime JSRuntime;
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>ozarinGrade</PageTitle>
+
+<div style="margin-bottom:55px"></div>
+@if (IsLoadingOverlay)
+{
+	<div id="loading">
+		<div class="w-100 d-flex justify-content-center align-items-center">
+			<div class="spinner-border text-primary spinner-custom" role="status"></div>
+		</div>
+	</div>
+}
+else
+{
+	var t_tables_filter = t_tables.Join(t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new
+	{
+		t.TrialSeatId,
+		t.TrialId,
+		t.SeatId,
+		t.UserId,
+		s.UserName
+	}).Join(t_trials, u => u.TrialId, v => v.TrialId, (u, v) => new
+	{
+		u.TrialSeatId,
+		u.TrialId,
+		u.SeatId,
+		u.UserId,
+		u.UserName,
+		v.TrialDateTime,
+		v.StartReturn,
+		v.BonusByRanking,
+		v.ChipsPrice,
+		v.YakitoriPrice,
+		v.TobiPrice,
+		v.YakumanPrice
+	}), j => j.TrialSeatId, k => k.TrialSeatId, (j, k) => new
+	{
+		j.TableId,
+		j.TrialSeatId,
+		k.TrialId,
+		k.SeatId,
+		k.UserId,
+		k.UserName,
+		k.TrialDateTime,
+		k.StartReturn,
+		k.BonusByRanking,
+		k.ChipsPrice,
+		k.YakitoriPrice,
+		k.TobiPrice,
+		k.YakumanPrice,
+		j.TableCountId,
+		j.Rank,
+		j.Score,
+		j.ChipsChange,
+		j.YakitoriState,
+		j.TobiState,
+		j.YakumanState
+	});
+
+	// 日付フィルター機能
+	var t_tables_grade = t_tables_filter;
+	var t_trials_grade = t_trials;
+	if (_startdate == null && _enddate == null)
+	{
+		t_tables_grade = t_tables_filter;
+		t_trials_grade = t_trials;
+	}
+	else if (_startdate != null && _enddate == null)
+	{
+		t_tables_grade = t_tables_filter.Where(a => a.TrialDateTime > _startdate);
+		t_trials_grade = t_trials.Where(a => a.TrialDateTime > _startdate).ToList();
+	}
+	else if (_startdate == null && _enddate != null)
+	{
+		t_tables_grade = t_tables_filter.Where(a => a.TrialDateTime < _enddate.Value.AddDays(1));
+		t_trials_grade = t_trials.Where(a => a.TrialDateTime < _enddate.Value.AddDays(1)).ToList();
+	}
+	else
+	{
+		t_tables_grade = t_tables_filter.Where(a => a.TrialDateTime > _startdate & a.TrialDateTime < _enddate.Value.AddDays(1));
+		t_trials_grade = t_trials.Where(a => a.TrialDateTime > _startdate & a.TrialDateTime < _enddate.Value.AddDays(1)).ToList();
+	}
+
+	<div class="smart_note">
+		<lable style="font-size:small">期間フィルター(yyyy/MM/dd形式で入力してください): </lable>
+		<table class="table table-sm" style="table-layout:fixed">
+			<tr align="center">
+				<td><input style="text-align:center;font-size:small;background-color:white" type="datetime" @bind="_startdate" @bind:format="yyyy/MM/dd" class="form-control" /></td>
+				<td style="width:50px;font-size:large">～</td>
+				<td><input style="text-align:center;font-size:small;background-color:white" type="datetime" @bind="_enddate" @bind:format="yyyy/MM/dd" class="form-control" /></td>
+			</tr>
+		</table>
+
+		<table class="table table-striped" border="2" style="font-size:x-small;table-layout:fixed;margin-top:20px;background-color:white">
+			<thead>
+				<tr style="background-color:khaki;font-size:x-small">
+					<th style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">名前</th>
+					<th style="width:37px;text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">卓数</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">合計点</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">平均点</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">平均順</th>
+					<th style="width:90px;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">過去5戦</th>
+				</tr>
+			</thead>
+			<tbody>
+				@foreach (var it in t_users)
+				{
+					var t_tables_userid = t_tables_grade.Where(u => u.UserId == it.UserId);
+					<tr>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserName</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Count())
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Sum(s => s.Score ?? 0))
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Average(s => s.Score ?? 0).ToString("F1"))
+								//@(Math.Round(Convert.ToDecimal(1.00 * ScoreSum(it.UserId) / t_tables_userid.Count()), 2, MidpointRounding.AwayFromZero))
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Average(s => s.Rank ?? 0).ToString("F2"))
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@foreach (var w in t_tables_userid.OrderByDescending(d => d.TrialSeatId).ThenByDescending(d => d.TableCountId).Take(5))
+							{
+								@(w.Rank + "←")
+								;
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		<p style="font-size:small">※各着順率、役満達成回数は画面を横向きにすると表示されます。</p>
+	</div>
+
+	<div class="smart">
+		<lable>期間フィルター(yyyy/MM/dd形式で入力してください): </lable>
+		<table class="table table-sm" style="table-layout:fixed">
+			<tr align="center">
+				<td><input style="text-align:center;background-color:white" type="datetime" @bind="_startdate" @bind:format="yyyy/MM/dd" class="form-control" /></td>
+				<td style="width:50px;font-size:x-large">～</td>
+				<td><input style="text-align:center;background-color:white" type="datetime" @bind="_enddate" @bind:format="yyyy/MM/dd" class="form-control" /></td>
+			</tr>
+		</table>
+
+		<table class="table table-striped" border="2" style="table-layout:fixed;margin-top:20px;background-color:white">
+			<thead>
+				<tr style="background-color:khaki;font-size:small">
+					<th style="width:65.6px;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc;font-size:larger">名前</th>
+					<th style="text-align:center;width:49.6px;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc;font-size:larger">卓数</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">合計点</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">平均点</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">平均順</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">役満数</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">1位率</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">2位率</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">3位率</th>
+					<th style="text-align:center;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">4位率</th>
+					<th style="width:142.4px;border-bottom:1px solid #cccccc;border-right:1px solid #cccccc;font-size:larger">過去5戦</th>
+				</tr>
+			</thead>
+			<tbody>
+				@foreach (var it in t_users)
+				{
+					var t_tables_userid = t_tables_grade.Where(u => u.UserId == it.UserId);
+					<tr>
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">@it.UserName</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Count())
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Sum(s => s.Score ?? 0))
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Average(s => s.Score ?? 0).ToString("F1"))
+								//@(Math.Round(Convert.ToDecimal(1.00 * ScoreSum(it.UserId) / t_tables_userid.Count()), 2, MidpointRounding.AwayFromZero))
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Average(s => s.Rank ?? 0).ToString("F2"))
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@if (t_tables_userid.Any())
+							{
+								@(t_tables_userid.Where(v => v.YakumanState > 0).Count())
+							}
+							else
+							{
+								@("---")
+							}
+						</td>
+						@for (var i = 0; i < 4; i++)
+						{
+							<td align="center" style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+								@if (t_tables_userid.Count() == 0)
+								{
+									@("---")
+								}
+								else
+								{
+									@((1.0 * t_tables.Join(t_trialseats, u => u.TrialSeatId, k => k.TrialSeatId, (u, k) => new
+									{
+										k.UserId,
+										u.Rank
+									}).Where(u => u.UserId == it.UserId).Where(v => v.Rank == i + 1).Count() * 100 / t_tables.Join(t_trialseats, a => a.TrialSeatId, b => b.TrialSeatId, (a, b) => new
+									{
+										b.UserId,
+										a.Rank
+									}).Where(z => z.UserId == it.UserId).Count()).ToString("F1"))
+								}
+							</td>
+						}
+						<td style="border-bottom:1px solid #cccccc;border-right:1px solid #cccccc">
+							@foreach (var w in t_tables_userid.OrderByDescending(d => d.TrialSeatId).ThenByDescending(d => d.TableCountId).Take(5))
+							{
+								@(w.Rank + "←")
+								;
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+@code {
+	private bool IsLoadingOverlay = false;
+	private List<TTrial> t_trials = new List<TTrial>();
+	private List<TTrialSeat> t_trialseats = new List<TTrialSeat>();
+	private List<TUser> t_users = new List<TUser>();
+	private List<TTable> t_tables = new List<TTable>();
+	private DateTime? _startdate { get; set; }
+	private DateTime? _enddate { get; set; }
+
+	private async void onInit()
+	{
+		IsLoadingOverlay = true;
+		await Task.Delay(1); // これをしないと、画面にスレッドが切り替わらず、オーバーレイが表示されない。StateHasChanged()でもだめ。
+
+		var response = await Http.PostAsJsonAsync($"subscriptioninfo-session/{"grade"}", "");
+		string url = await response.Content.ReadAsStringAsync();
+		NavigationManager.NavigateTo(url);
+
+		t_tables = await Http.GetFromJsonAsync<List<TTable>>("api/TTables");
+		t_trials = await Http.GetFromJsonAsync<List<TTrial>>("api/TTrials");
+		t_trialseats = await Http.GetFromJsonAsync<List<TTrialSeat>>("api/TTrialSeats");
+		t_users = await Http.GetFromJsonAsync<List<TUser>>("api/TUsers");
+		IsLoadingOverlay = false;
+		StateHasChanged();
+	}
+	protected override async Task OnInitializedAsync()
+	{
+		onInit();
+	}
+}

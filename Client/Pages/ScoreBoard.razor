@@ -1,0 +1,1714 @@
+﻿@page "/scoreboard"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject IJSRuntime JSRuntime;
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>ozarinScoreboard</PageTitle>
+
+<div style="margin-bottom:55px"></div>
+@if (IsLoadingOverlay)
+{
+	<div id="loading">
+		<div class="w-100 d-flex justify-content-center align-items-center">
+			<div class="spinner-border text-primary spinner-custom" role="status"></div>
+		</div>
+	</div>
+}
+else
+{
+	// t_tablesの関連項目を連結して使用
+	var t_tables_trial = t_tables.Join(t_trialseats.Join(t_trials, t => t.TrialId, s => s.TrialId, (t, s) => new
+	{
+		t.TrialSeatId,
+		t.TrialId,
+		t.SeatId,
+		s.StartReturn,
+		s.BonusByRanking,
+		s.ChipsPrice,
+		s.YakitoriPrice,
+		s.TobiPrice,
+		s.YakumanPrice
+	}), u => u.TrialSeatId, k => k.TrialSeatId, (u, k) => new
+	{
+		u.TableId,
+		u.TrialSeatId,
+		k.TrialId,
+		k.SeatId,
+		k.StartReturn,
+		k.BonusByRanking,
+		k.ChipsPrice,
+		k.YakitoriPrice,
+		k.TobiPrice,
+		k.YakumanPrice,
+		u.TableCountId,
+		u.Rank,
+		u.Score,
+		u.ChipsChange,
+		u.YakitoriState,
+		u.TobiState,
+		u.YakumanState,
+	}).Where(u => u.TrialId == t_trial.TrialId);
+	var t_trialseats_trial = t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new { t.TrialSeatId, t.TrialId, t.SeatId, s?.UserName }).Where(a => a.TrialId == t_trial.TrialId);
+
+	// 条件付きフォントスタイルとして使用
+	string b = "font-weight:bold";
+	string br = "font-weight:bold;color:red";
+	string fontchips = b;
+	string fontyakitori = b;
+	string fonttobi = b;
+	string fontyakuman = b;
+	if (t_trial.ChipsPrice > 0)
+	{
+		fontchips = br;
+	}
+	if (t_trial.YakitoriPrice > 0)
+	{
+		fontyakitori = br;
+	}
+	if (t_trial.TobiPrice > 0)
+	{
+		fonttobi = br;
+	}
+	if (t_trial.YakumanPrice > 0)
+	{
+		fontyakuman = br;
+	}
+
+	// スコア集計時に使用
+	int colcount = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).ToList().Count;
+	int rowcount = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).ToList().Count;
+	int?[] col = new int?[colcount];
+	int?[] row = new int?[rowcount];
+	int?[] sumcol = new int?[colcount];
+	int?[] sumrow = new int?[rowcount];
+	int? sumrowtotal = 0;
+	int?[] pmw = new int?[colcount];
+	for (var j = 0; j < colcount; j++)
+	{
+		sumcol[j] = 0;
+		sumrow[j] = 0;
+		pmw[j] = 0;
+	}
+
+	<div class="smart_note">
+		<div style="margin-bottom:10px">
+			<label style="font-size:small">対局日時:</label>
+			<select style="margin-bottom:16px;background-color:honeydew" @bind="t_trial.TrialId" class="form-control">
+				@foreach (var it in t_trials.OrderByDescending(m => m.TrialDateTime).Take(100))
+				{
+					<option value="@it.TrialId">@it.TrialDateTime.Value.ToString("yyyy/MM/dd(ddd) HH:mm")</option>
+				}
+			</select>
+			<button style="width:140px;background-color:darkgoldenrod" class="btn btn-primary" @onclick="onTrialAdd">新規対局作成</button>
+			<button style="width:140px;background-color:gray" class="btn btn-secondary" @onclick="onTrialDel">対局削除</button>
+			<table class="table table-sm" border="1" style="margin-top:25px;table-layout:fixed;font-size:x-small;background-color:white">
+				<tr align="center" style="background-color:#F2F2F2">
+					<td style="@border">対局日時</td>
+					<td style="@border">始点-返点</td>
+					<td style="@border">ウマ</td>
+					<td style="@border">チップ点/枚</td>
+					<td style="@border">焼き鳥点/人</td>
+					<td style="@border">飛び賞点/人</td>
+					<td style="@border">役満賞点/人</td>
+				</tr>
+				<tr align="center" style="font-size:larger">
+					<td style="@border"><label style="@b">上記</label></td>
+					<td style="@border"><label style="@b">@t_trial.StartReturn</label></td>
+					<td style="@border"><label style="@b">@t_trial.BonusByRanking</label></td>
+					<td style="@border"><label style="@fontchips">@t_trial.ChipsPrice</label></td>
+					<td style="@border"><label style="@fontyakitori">@t_trial.YakitoriPrice</label></td>
+					<td style="@border"><label style="@fonttobi">@t_trial.TobiPrice</label></td>
+					<td style="@border"><label style="@fontyakuman">@t_trial.YakumanPrice</label></td>
+				</tr>
+				<tr style="background-color:beige">
+					<td style="@border">
+						<input style="text-align:center;background-color:white;font-size:xx-small" type="datetime" @bind="_trialdatetime" @bind:format="yyyy/MM/dd HH:mm" class="form-control" />
+					</td>
+					<td style="@border">
+						<select @bind="_startreturn" class="form-control" style="text-align:center;background-color:white;font-size:xx-small">
+							<option></option>
+							<option>25-30</option>
+							<option>20-25</option>
+						</select>
+					</td>
+					<td style="@border">
+						<select @bind="_bonusbyranking" class="form-control" style="text-align:center;background-color:white;font-size:xx-small">
+							<option></option>
+							<option>10-30</option>
+							<option>10-20</option>
+							<option>5-10</option>
+						</select>
+					</td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:xx-small" type="number" @bind="_chipsprice" class="form-control" /></td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:xx-small" type="number" @bind="_yakitoriprice" class="form-control" /></td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:xx-small" type="number" @bind="_tobiprice" class="form-control" /></td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:xx-small" type="number" @bind="_yakumanprice" class="form-control" /></td>
+				</tr>
+			</table>
+			<button class="btn btn-success" style="width:140px;margin-bottom:10px" @onclick="onTrialUpdate">設定変更</button>
+			<p style="color:red;font-size:x-small">※変更したい項目のみ値を入力してください。"設定変更ボタン"を押さなければ設定は変更されません。なお、既存の卓番に対しては設定変更してもスコアに反映されません。対局日時は"yyyy/MM/dd HH:mm"形式で入力してください。</p>
+		</div>
+
+		<details style="margin-bottom:20px">
+			<summary style="font-size:small">クリックしてメンバーを追加する</summary>
+			<div style="margin-top:10px">
+				<label for="adduser" style="font-size:small">次のメンバーを追加する: </label>
+				<select style="margin-bottom:10px;font-size:small" @bind-value="t_trialseat.UserId" @bind-value:event="oninput" class="form-control">
+					<option selected value="-1">select one</option>
+					@foreach (var it in t_users)
+					{
+						int n = 0;
+						@foreach (var p in t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId))
+						{
+							@if (it.UserId == p.UserId)
+							{
+								n++;
+							}
+						}
+						@if (n == 0)
+						{
+							<option value="@it.UserId">@it.UserName</option>
+						}
+					}
+				</select>
+				<button style="width:140px" class="btn btn-primary" @onclick="onUserAdd" disabled="@(IsButtonDisabled())">メンバー追加</button>
+				<button style="width:140px" class="btn btn-secondary" @onclick="onUserDel">メンバー削除</button>
+				<p style="margin-top:10px;font-size:x-small;color:red">
+					※メンバーの追加・削除は常に表の右端で実行されます。既に値データが存在するメンバーは削除できません。メンバーは最大で8人まで追加できます。
+				</p>
+			</div>
+		</details>
+
+		@if (t_trialseats_trial.Count() < 4)
+		{
+			foreach (var it in t_trialseats_trial)
+			{
+				@(it.SeatId + "." + it.UserName)
+				<br />
+			}
+		}
+		else
+		{
+			<label style="font-size:small" for="Check0"><input id="Check0" type="checkbox" class="form-check-input" @bind="afterscoreRow" @oninput="CheckSelection0" />最終スコアのみ入力 </label>
+			<table class="table table-striped" border="2" style="table-layout:fixed;font-size:small;background-color:white" id="table_01">
+				<thead>
+					<tr align="center" style="background-color:khaki;font-size:x-small">
+						<th style="@border">名前</th>
+						<th style="@(border + ";width:40px")">計</th>
+						<th style="@(border + selectionstring0)">最終<br>スコア</th>
+						<th style="@("width:100px;" + border + selectionstring3)">終局時<br>持ち点</th>
+						<th style="@(border + selectionstring3)">チップ<br>増減数</th>
+						<th style="@("width:38px;" + border + selectionstring3)">焼き鳥</th>
+					</tr>
+				</thead>
+				<tbody>
+					@for (var i = 0; i < (t_tables_trial.ToList().Count) / 4; i++)
+					{
+						@for (var j = 0; j < rowcount; j++)
+						{
+							row[j] = 0;
+							@foreach (var k in t_tables_trial.Where(u => u.TableCountId == i + 1))
+							{
+								@if (k.SeatId == j + 1)
+								{
+									row[j] = k.Score;
+								}
+							}
+							sumrow[j] += row[j];
+						}
+					}
+					@foreach (var it in t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new
+					{
+						t.TrialSeatId,
+						t.TrialId,
+						t.SeatId,
+						s?.UserName
+					}).Where(a => a.TrialId == t_trialseat.TrialId))
+					{
+						<tr>
+							<td style="@border">@it.UserName</td>
+							<td style="@border">@sumrow[it.SeatId - 1]</td>
+							<td style="@(border + selectionstring0)">
+								<input style="text-align:center" type="number" @bind="iz[it.SeatId - 1]" class="form-control" />
+							</td>
+							<td style="@(border + selectionstring3)">
+								<table class="table">
+									<tr>
+										<td><input style="text-align:center;background-color:white" type="number" @bind="ic[it.SeatId - 1]" class="form-control" /></td>
+										<td>00</td>
+									</tr>
+								</table>
+							</td>
+							<td style="@(border + selectionstring3)">
+								<input style="text-align:center" type="number" @bind="ie[it.SeatId - 1]" class="form-control" />
+							</td>
+							<td style="@(border + selectionstring3)">
+								<input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[it.SeatId - 1]" />
+							</td>
+						</tr>
+					}
+					<tr align="center" style="background-color:khaki;font-size:x-small">
+						<td style="@border"></td>
+						<td style="@border">
+							@for (var i = 0; i < rowcount; i++)
+							{
+								sumrowtotal += sumrow[i];
+							}
+							@sumrowtotal
+						</td>
+						<td style="@(border + selectionstring0)">
+							@(((iz[0] ?? 0) + (iz[1] ?? 0) + (iz[2] ?? 0) + (iz[3] ?? 0) + (iz[4] ?? 0) + (iz[5] ?? 0) + (iz[6] ?? 0) + (iz[7] ?? 0)) * -1)
+						</td>
+						<td style="@(border + selectionstring3)">
+							@(int.Parse(t_trial.StartReturn.Substring(0, t_trial.StartReturn.IndexOf("-"))) * 4 * 10 - ((ic[0] ?? 0) + (ic[1] ?? 0) + (ic[2] ?? 0) + (ic[3] ?? 0) + (ic[4] ?? 0) + (ic[5] ?? 0) + (ic[6] ?? 0) + (ic[7] ?? 0)))
+						</td>
+						<td style="@(border + selectionstring3)">
+							@(((ie[0] ?? 0) + (ie[1] ?? 0) + (ie[2] ?? 0) + (ie[3] ?? 0) + (ie[4] ?? 0) + (ie[5] ?? 0) + (ie[6] ?? 0) + (ie[7] ?? 0)) * -1)
+						</td>
+						<td style="@(border + selectionstring3)"></td>
+					</tr>
+				</tbody>
+			</table>
+
+			<div style="margin-bottom:20px">
+				<button style="width:140px" class="btn btn-primary" disabled="@(buttonDisabled)" @onclick="onScoreAdd">卓データ追加</button>
+				<button style="width:140px" class="btn btn-secondary" @onclick="onScoreClear">スコアクリア</button>
+				@*<button class="btn btn-link" @onclick="onSubmit">合計更新</button>*@
+			</div>
+			<p style="font-size:small;margin-bottom:30px">※調整行、飛び賞・役満賞入力行を表示するには画面を横向きにしてください。</p>
+		}
+	</div>
+
+	<div class="smart">
+		<div>
+			<label>対局日時:</label>
+			<table class="table" style="table-layout:fixed">
+				<tr>
+					<td>
+						<select style="font-size:larger;background-color:honeydew" @bind="t_trial.TrialId" class="form-control">
+							@foreach (var it in t_trials.OrderByDescending(m => m.TrialDateTime))
+							{
+								<option value="@it.TrialId">@it.TrialDateTime.Value.ToString("yyyy/MM/dd(ddd) HH:mm")</option>
+							}
+						</select>
+					</td>
+					<td style="width:145px"><button style="width:140px;background-color:darkgoldenrod" class="btn btn-primary" @onclick="onTrialAdd">新規対局作成</button></td>
+					<td style="width:145px"><button style="width:140px;background-color:gray" class="btn btn-secondary" @onclick="onTrialDel">対局削除</button></td>
+				</tr>
+			</table>
+
+			<table class="table table-sm" border="1" style="table-layout:fixed;background-color:white">
+				<tr align="center" style="background-color:#F2F2F2">
+					<td style="@border">対局日時</td>
+					<td style="@border">始点-返点</td>
+					<td style="@border">ウマ</td>
+					<td style="@border">チップ点/枚</td>
+					<td style="@border">焼き鳥点/人</td>
+					<td style="@border">飛び賞点/人</td>
+					<td style="@border">役満賞点/人</td>
+				</tr>
+				<tr align="center">
+					<td style="@border"><label style="@b">上記</label></td>
+					<td style="@border"><label style="@b">@t_trial.StartReturn</label></td>
+					<td style="@border"><label style="@b">@t_trial.BonusByRanking</label></td>
+					<td style="@border"><label style="@fontchips">@t_trial.ChipsPrice</label></td>
+					<td style="@border"><label style="@fontyakitori">@t_trial.YakitoriPrice</label></td>
+					<td style="@border"><label style="@fonttobi">@t_trial.TobiPrice</label></td>
+					<td style="@border"><label style="@fontyakuman">@t_trial.YakumanPrice</label></td>
+				</tr>
+				<tr style="background-color:beige">
+					<td style="@border">
+						<input style="text-align:center;background-color:white;font-size:smaller" type="datetime" @bind="_trialdatetime" @bind:format="yyyy/MM/dd HH:mm" class="form-control" />
+					</td>
+					<td style="@border">
+						<select @bind="_startreturn" class="form-control" style="text-align:center;background-color:white;font-size:smaller">
+							<option></option>
+							<option>25-30</option>
+							<option>20-25</option>
+						</select>
+					</td>
+					<td style="@border">
+						<select @bind="_bonusbyranking" class="form-control" style="text-align:center;background-color:white;font-size:smaller">
+							<option></option>
+							<option>10-30</option>
+							<option>10-20</option>
+							<option>5-10</option>
+						</select>
+					</td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:smaller" type="number" @bind="_chipsprice" class="form-control" /></td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:smaller" type="number" @bind="_yakitoriprice" class="form-control" /></td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:smaller" type="number" @bind="_tobiprice" class="form-control" /></td>
+					<td style="@border"><input style="text-align:center;background-color:white;font-size:smaller" type="number" @bind="_yakumanprice" class="form-control" /></td>
+				</tr>
+			</table>
+			<button class="btn btn-success" style="width:140px;margin-bottom:10px" @onclick="onTrialUpdate">設定変更</button>
+			<p style="color:red">※変更したい項目のみ値を入力してください。"設定変更ボタン"を押さなければ設定は変更されません。なお、既存の卓番に対しては設定変更してもスコアに反映されません。対局日時は"yyyy/MM/dd HH:mm"形式で入力してください。</p>
+		</div>
+
+		<details style="margin-top:30px;margin-bottom:20px">
+			<summary>クリックしてメンバーを追加・削除する</summary>
+			<div style="margin-top:10px">
+				<label for="adduser">次のメンバーを追加する: </label>
+				<select style="margin-bottom:10px" @bind-value="t_trialseat.UserId" @bind-value:event="oninput" class="form-control">
+					<option selected value="-1">select one</option>
+					@foreach (var it in t_users)
+					{
+						int n = 0;
+						@foreach (var p in t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId))
+						{
+							@if (it.UserId == p.UserId)
+							{
+								n++;
+							}
+						}
+						@if (n == 0)
+						{
+							<option value="@it.UserId">@it.UserName</option>
+						}
+					}
+				</select>
+				<button style="width:140px" class="btn btn-primary" @onclick="onUserAdd" disabled="@(IsButtonDisabled())">メンバー追加</button>
+				<button style="width:140px" class="btn btn-secondary" @onclick="onUserDel">メンバー削除</button>
+				<p style="margin-top:10px;font-size:12pt;color:red">
+					※メンバーの追加・削除は常に表の右端で実行されます。既に値データが存在するメンバーは削除できません。メンバーは最大で8人まで追加できます。
+				</p>
+			</div>
+		</details>
+
+		@if (t_trialseats_trial.Count() < 4)
+		{
+			foreach (var it in t_trialseats_trial)
+			{
+				@(it.SeatId + "." + it.UserName)
+				<br />
+			}
+		}
+		else
+		{
+			<label for="Check0"><input id="Check0" type="checkbox" class="form-check-input" @bind="afterscoreRow" @oninput="CheckSelection0" />最終スコアのみ入力 </label>
+			<label for="Check1"><input id="Check1" type="checkbox" class="form-check-input" @bind="adjustmentRow" @oninput="CheckSelection1" />調整行表示 </label>
+			<label for="Check2"><input id="Check2" type="checkbox" class="form-check-input" disabled="@checkDisabled" @bind="tobiyakumanRow" @oninput="CheckSelection2" />飛び賞・役満賞入力行表示</label>
+			<table class="table" border="2" style="table-layout:fixed;font-size:large;background-color:white" id="table_01">
+				<thead>
+					<tr align="center">
+						<th style="@(border + ";width:3.9em;background-color:#F2F2F2")">卓番</th>
+						@foreach (var it in t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new
+						{
+							t.TrialSeatId,
+							t.TrialId,
+							t.SeatId,
+							s?.UserName
+						}).Where(a => a.TrialId == t_trialseat.TrialId))
+						{
+							<th style="@(border + ";background-color:khaki")">@it.UserName</th>
+						}
+						<th style="@(border + ";width:3.5em;background-color:#F2F2F2")"></th>
+					</tr>
+				</thead>
+				<tbody>
+					@for (var i = 0; i < (t_tables_trial.ToList().Count) / 4; i++)
+					{
+						<tr align="center">
+							<td style="@(border + ";background-color:#F2F2F2")">@(i + 1)</td>
+							@for (var j = 0; j < colcount; j++)
+							{
+								col[j] = 0;
+								<td style="@border">
+									@foreach (var k in t_tables_trial.Where(u => u.TableCountId == i + 1))
+									{
+										@if (k.SeatId == j + 1)
+										{
+											@(col[j] = k.Score)
+										}
+									}
+								</td>
+								sumcol[j] += col[j];
+							}
+							<td style="@(border + ";background-color:#F2F2F2")"></td>
+						</tr>
+					}
+					<tr align="center" class="fw-bold" style="font-size:larger;border-bottom:1px solid black">
+						<td style="@(border + ";background-color:#F2F2F2")">計</td>
+						@for (var j = 0; j < colcount; j++)
+						{
+							<td style="@border">
+								@sumcol[j]
+							</td>
+						}
+						<td style="@(border + ";background-color:#F2F2F2")"></td>
+					</tr>
+					<tr align="center" style="@selectionstring1">
+						<td style="@(border + ";font-size:small;background-color:#F2F2F2")">調整</td>
+						@for (var j = 0; j < colcount; j++)
+						{
+							pmw[j] = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Where(a => a.SeatId == j + 1).Select(a => a.ProgressMidway).FirstOrDefault();
+							<td style="@border">
+								@pmw[j]
+							</td>
+						}
+						<td style="@(border + ";background-color:#F2F2F2")"></td>
+					</tr>
+					<tr align="center" style="@selectionstring1">
+						<td style="@(border + ";background-color:#F2F2F2")">
+							<buttton style="font-size:small" class="btn btn-success" @onclick="onProgressEdit">反映</buttton>
+						</td>
+						@if (colcount > 0)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[0]" class="form-control" /></td>
+						}
+						@if (colcount > 1)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[1]" class="form-control" /></td>
+						}
+						@if (colcount > 2)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[2]" class="form-control" /></td>
+						}
+						@if (colcount > 3)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[3]" class="form-control" /></td>
+						}
+						@if (colcount > 4)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[4]" class="form-control" /></td>
+						}
+						@if (colcount > 5)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[5]" class="form-control" /></td>
+						}
+						@if (colcount > 6)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[6]" class="form-control" /></td>
+						}
+						@if (colcount > 7)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ia[7]" class="form-control" /></td>
+						}
+						<td style="@(border + ";font-size:small;background-color:#F2F2F2")">
+							@(((ia[0] ?? 0) + (ia[1] ?? 0) + (ia[2] ?? 0) + (ia[3] ?? 0) + (ia[4] ?? 0) + (ia[5] ?? 0) + (ia[6] ?? 0) + (ia[7] ?? 0)) * -1)
+						</td>
+					</tr>
+					<tr align="center" style="@(selectionstring1 + ";font-size:larger;border-bottom:1px solid black")" class="fw-bold">
+						<td style="@(border + ";background-color:#F2F2F2")">総計</td>
+						@for (var j = 0; j < colcount; j++)
+						{
+							<td style="@border">
+								@(sumcol[j] + pmw[j])
+							</td>
+						}
+						<td style="@(border + ";background-color:#F2F2F2")"></td>
+					</tr>
+					<tr align="center" style="@("background-color:beige" + selectionstring0)">
+						<td align="center" style="@(border + ";font-weight:bold;font-size:small;background-color:#F2F2F2")"><br>最終<br>スコア</td>
+						@if (colcount > 0)
+						{
+							<td style="@border">
+								<label id="seat-1z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 1).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-1z" style="text-align:center;background-color:white" type="number" @bind="iz[0]" class="form-control" />
+							</td>
+						}
+						@if (colcount > 1)
+						{
+							<td style="@border">
+								<label id="seat-2z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 2).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-2z" style="text-align:center;background-color:white" type="number" @bind="iz[1]" class="form-control" />
+							</td>
+						}
+						@if (colcount > 2)
+						{
+							<td style="@border">
+								<label id="seat-3z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 3).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-3z" style="text-align:center;background-color:white" type="number" @bind="iz[2]" class="form-control" />
+							</td>
+						}
+						@if (colcount > 3)
+						{
+							<td style="@border">
+								<label id="seat-4z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 4).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-4z" style="text-align:center;background-color:white" type="number" @bind="iz[3]" class="form-control" />
+							</td>
+						}
+						@if (colcount > 4)
+						{
+							<td style="@border">
+								<label id="seat-5z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 5).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-5z" style="text-align:center;background-color:white" type="number" @bind="iz[4]" class="form-control" />
+							</td>
+						}
+						@if (colcount > 5)
+						{
+							<td style="@border">
+								<label id="seat-6z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 6).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-6z" style="text-align:center;background-color:white" type="number" @bind="iz[5]" class="form-control" />
+							</td>
+						}
+						@if (colcount > 6)
+						{
+							<td style="@border">
+								<label id="seat-7z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 7).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-7z" style="text-align:center;background-color:white" type="number" @bind="iz[6]" class="form-control" />
+							</td>
+						}
+						@if (colcount > 7)
+						{
+							<td style="@border">
+								<label id="seat-8z" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 8).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<input id="seat-8z" style="text-align:center;background-color:white" type="number" @bind="iz[7]" class="form-control" />
+							</td>
+						}
+						<td style="@(border + ";font-size:small;background-color:#F2F2F2")">
+							<br><br>@(((iz[0] ?? 0) + (iz[1] ?? 0) + (iz[2] ?? 0) + (iz[3] ?? 0) + (iz[4] ?? 0) + (iz[5] ?? 0) + (iz[6] ?? 0) + (iz[7] ?? 0)) * -1)
+						</td>
+					</tr>
+					<tr align="center" style="@("background-color:beige" + selectionstring3)">
+						<td align="center" style="@(border + ";font-weight:bold;font-size:small;background-color:#F2F2F2")"><br>終局時<br>持ち点</td>
+						@if (colcount > 0)
+						{
+							<td style="@border">
+								<label id="seat-1" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 1).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-1" style="text-align:center;background-color:white" type="number" @bind="ic[0]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						@if (colcount > 1)
+						{
+							<td style="@border">
+								<label id="seat-2" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 2).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-2" style="text-align:center;background-color:white" type="number" @bind="ic[1]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						@if (colcount > 2)
+						{
+							<td style="@border">
+								<label id="seat-3" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 3).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-3" style="text-align:center;background-color:white" type="number" @bind="ic[2]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						@if (colcount > 3)
+						{
+							<td style="@border">
+								<label id="seat-4" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 4).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-4" style="text-align:center;background-color:white" type="number" @bind="ic[3]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						@if (colcount > 4)
+						{
+							<td style="@border">
+								<label id="seat-5" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 5).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-5" style="text-align:center;background-color:white" type="number" @bind="ic[4]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						@if (colcount > 5)
+						{
+							<td style="@border">
+								<label id="seat-6" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 6).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-6" style="text-align:center;background-color:white" type="number" @bind="ic[5]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						@if (colcount > 6)
+						{
+							<td style="@border">
+								<label id="seat-7" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 7).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-7" style="text-align:center;background-color:white" type="number" @bind="ic[6]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						@if (colcount > 7)
+						{
+							<td style="@border">
+								<label id="seat-8" style="font-size:small">@(t_trialseats_trial.Where(a => a.SeatId == 8).Select(a => a.UserName).FirstOrDefault() + ":")</label>
+								<table class="table">
+									<tr>
+										<td><input id="seat-8" style="text-align:center;background-color:white" type="number" @bind="ic[7]" class="form-control" /></td>
+										<td style="font-size:small">00</td>
+									</tr>
+								</table>
+							</td>
+						}
+						<td style="@(border + ";font-size:small;background-color:#F2F2F2")">
+							<br><br>@(int.Parse(t_trial.StartReturn.Substring(0, t_trial.StartReturn.IndexOf("-"))) * 4 * 10 - ((ic[0] ?? 0) + (ic[1] ?? 0) + (ic[2] ?? 0) + (ic[3] ?? 0) + (ic[4] ?? 0) + (ic[5] ?? 0) + (ic[6] ?? 0) + (ic[7] ?? 0)))
+						</td>
+					</tr>
+					<tr align="center" style="@("background-color:beige" + selectionstring3)">
+						<td style="@(border + ";font-weight:bold;font-size:small;background-color:#F2F2F2")">チップ<br>増減数</td>
+						@if (colcount > 0)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[0]" class="form-control" /></td>
+						}
+						@if (colcount > 1)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[1]" class="form-control" /></td>
+						}
+						@if (colcount > 2)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[2]" class="form-control" /></td>
+						}
+						@if (colcount > 3)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[3]" class="form-control" /></td>
+						}
+						@if (colcount > 4)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[4]" class="form-control" /></td>
+						}
+						@if (colcount > 5)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[5]" class="form-control" /></td>
+						}
+						@if (colcount > 6)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[6]" class="form-control" /></td>
+						}
+						@if (colcount > 7)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ie[7]" class="form-control" /></td>
+						}
+						<td style="@(border + ";font-size:small;background-color:#F2F2F2")">
+							@(((ie[0] ?? 0) + (ie[1] ?? 0) + (ie[2] ?? 0) + (ie[3] ?? 0) + (ie[4] ?? 0) + (ie[5] ?? 0) + (ie[6] ?? 0) + (ie[7] ?? 0)) * -1)
+						</td>
+					</tr>
+					<tr align="center" style="@("background-color:beige" + selectionstring3)">
+						<td style="@(border + ";font-weight:bold;font-size:small;background-color:#F2F2F2")">焼き鳥</td>
+						@if (colcount > 0)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[0]" /></td>
+						}
+						@if (colcount > 1)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[1]" /></td>
+						}
+						@if (colcount > 2)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[2]" /></td>
+						}
+						@if (colcount > 3)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[3]" /></td>
+						}
+						@if (colcount > 4)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[4]" /></td>
+						}
+						@if (colcount > 5)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[5]" /></td>
+						}
+						@if (colcount > 6)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[6]" /></td>
+						}
+						@if (colcount > 7)
+						{
+							<td style="@border"><input style="transform:scale(2);text-align:center" type="checkbox" @bind="ig[7]" /></td>
+						}
+						<td style="background-color:#F2F2F2"></td>
+					</tr>
+					<tr align="center" style="@selectionstring2">
+						<td style="@(border + ";font-weight:bold;font-size:small;background-color:#F2F2F2")">飛び賞<br>得損数</td>
+						@if (colcount > 0)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[0]" class="form-control" /></td>
+						}
+						@if (colcount > 1)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[1]" class="form-control" /></td>
+						}
+						@if (colcount > 2)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[2]" class="form-control" /></td>
+						}
+						@if (colcount > 3)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[3]" class="form-control" /></td>
+						}
+						@if (colcount > 4)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[4]" class="form-control" /></td>
+						}
+						@if (colcount > 5)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[5]" class="form-control" /></td>
+						}
+						@if (colcount > 6)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[6]" class="form-control" /></td>
+						}
+						@if (colcount > 7)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="ih[7]" class="form-control" /></td>
+						}
+						<td style="@(border + ";font-size:small;background-color:#F2F2F2")">
+							@(((ih[0] ?? 0) + (ih[1] ?? 0) + (ih[2] ?? 0) + (ih[3] ?? 0) + (ih[4] ?? 0) + (ih[5] ?? 0) + (ih[6] ?? 0) + (ih[7] ?? 0)) * -1)
+						</td>
+					</tr>
+					<tr align="center" style="@selectionstring2">
+						<td style="@(border + ";font-weight:bold;font-size:small;background-color:#F2F2F2")">役満賞<br>得損数</td>
+						@if (colcount > 0)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[0]" class="form-control" /></td>
+						}
+						@if (colcount > 1)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[1]" class="form-control" /></td>
+						}
+						@if (colcount > 2)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[2]" class="form-control" /></td>
+						}
+						@if (colcount > 3)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[3]" class="form-control" /></td>
+						}
+						@if (colcount > 4)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[4]" class="form-control" /></td>
+						}
+						@if (colcount > 5)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[5]" class="form-control" /></td>
+						}
+						@if (colcount > 6)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[6]" class="form-control" /></td>
+						}
+						@if (colcount > 7)
+						{
+							<td style="@border"><input style="text-align:center" type="number" @bind="id[7]" class="form-control" /></td>
+						}
+						<td style="@(border + ";font-size:small;background-color:#F2F2F2")">
+							@(((id[0] ?? 0) + (id[1] ?? 0) + (id[2] ?? 0) + (id[3] ?? 0) + (id[4] ?? 0) + (id[5] ?? 0) + (id[6] ?? 0) + (id[7] ?? 0)) * -1)
+						</td>
+					</tr>
+				</tbody>
+			</table>
+
+			<div align="right" style="margin-top:5px;margin-bottom:20px">
+				<button style="width:140px" class="btn btn-primary" disabled="@(buttonDisabled)" @onclick="onScoreAdd">卓データ追加</button>
+				<button style="width:140px" class="btn btn-secondary" @onclick="onScoreClear">スコアクリア</button>
+				@*<button class="btn btn-link" @onclick="onSubmit">合計更新</button>*@
+			</div>
+		}
+	</div>
+}
+
+@code {
+	private DateTime? _trialdatetime { get; set; }
+	private string? _startreturn { get; set; }
+	private string? _bonusbyranking { get; set; }
+	private string? _calculationmethod { get; set; }
+	private int? _chipsprice { get; set; }
+	private int? _yakitoriprice { get; set; }
+	private int? _tobiprice { get; set; }
+	private int? _yakumanprice { get; set; }
+	private bool IsLoadingOverlay = false;
+	private string? selectionstring0 { get; set; }
+	private string? selectionstring1 { get; set; }
+	private string? selectionstring2 { get; set; }
+	private string? selectionstring3 { get; set; }
+	private string border { get; } = "border-bottom:1px solid #cccccc;border-right:1px solid #cccccc";
+	private bool afterscoreRow { get; set; } = false;
+	private bool adjustmentRow { get; set; } = false;
+	private bool tobiyakumanRow { get; set; } = false;
+	private bool checkDisabled { get; set; } = false;
+	private bool buttonDisabled { get; set; } = false;
+	private int b1 { get; set; } = 0;
+	private int b2 { get; set; } = 0;
+	private int b3 { get; set; } = 0;
+	private int b4 { get; set; } = 0;
+	private int? c1 { get; set; } = null;
+	private int? c2 { get; set; } = null;
+	private int? c3 { get; set; } = null;
+	private int? c4 { get; set; } = null;
+	private int? d1 { get; set; } = null;
+	private int? d2 { get; set; } = null;
+	private int? d3 { get; set; } = null;
+	private int? d4 { get; set; } = null;
+	private int? e1 { get; set; } = null;
+	private int? e2 { get; set; } = null;
+	private int? e3 { get; set; } = null;
+	private int? e4 { get; set; } = null;
+	private int? g1 { get; set; } = null;
+	private int? g2 { get; set; } = null;
+	private int? g3 { get; set; } = null;
+	private int? g4 { get; set; } = null;
+	private int? h1 { get; set; } = null;
+	private int? h2 { get; set; } = null;
+	private int? h3 { get; set; } = null;
+	private int? h4 { get; set; } = null;
+	private int? z1 { get; set; } = null;
+	private int? z2 { get; set; } = null;
+	private int? z3 { get; set; } = null;
+	private int? z4 { get; set; } = null;
+	private int?[] ia = new int?[12];
+	private int?[] ic = new int?[12];
+	private int?[] id = new int?[12];
+	private int?[] ie = new int?[12];
+	private bool[] ig = new bool[12];
+	private int?[] ih = new int?[12];
+	private int?[] iz = new int?[12];
+	private List<TTrial>? t_trials = new List<TTrial>();
+	private TTrial t_trial { get; set; } = new TTrial();
+	private List<TTrialSeat>? t_trialseats = new List<TTrialSeat>();
+	private TTrialSeat t_trialseat { get; set; } = new TTrialSeat();
+	private List<TUser>? t_users = new List<TUser>();
+	private List<TTable>? t_tables = new List<TTable>();
+	private TTable t_table { get; set; } = new TTable();
+
+	private async void Update()
+	{
+		t_tables = await Http.GetFromJsonAsync<List<TTable>>("api/TTables");
+		t_trials = await Http.GetFromJsonAsync<List<TTrial>>("api/TTrials");
+		t_trialseats = await Http.GetFromJsonAsync<List<TTrialSeat>>("api/TTrialSeats");
+		t_users = await Http.GetFromJsonAsync<List<TUser>>("api/TUsers");
+		StateHasChanged();
+	}
+	private async void onInit()
+	{
+		IsLoadingOverlay = true;
+		await Task.Delay(1); // これをしないと、画面にスレッドが切り替わらず、オーバーレイが表示されない。StateHasChanged()でもだめ。
+
+		var response = await Http.PostAsJsonAsync($"subscriptioninfo-session/{"scoreboard"}", "");
+		string url = await response.Content.ReadAsStringAsync();
+		NavigationManager.NavigateTo(url);
+
+		t_tables = await Http.GetFromJsonAsync<List<TTable>>("api/TTables");
+		t_trials = await Http.GetFromJsonAsync<List<TTrial>>("api/TTrials");
+		t_trialseats = await Http.GetFromJsonAsync<List<TTrialSeat>>("api/TTrialSeats");
+		t_users = await Http.GetFromJsonAsync<List<TUser>>("api/TUsers");
+		if (t_trials.Any())
+		{
+			t_trialseat.TrialId = t_trials.OrderByDescending(m => m.TrialDateTime).Select(m => m.TrialId).FirstOrDefault();
+		}
+		t_trial.TrialId = t_trialseat.TrialId;
+		t_trial.StartReturn = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.StartReturn).FirstOrDefault();
+		t_trial.BonusByRanking = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.BonusByRanking).FirstOrDefault();
+		t_trial.ChipsPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.ChipsPrice).FirstOrDefault();
+		t_trial.YakitoriPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.YakitoriPrice).FirstOrDefault();
+		t_trial.TobiPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.TobiPrice).FirstOrDefault();
+		t_trial.YakumanPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.YakumanPrice).FirstOrDefault();
+		selectionstring0 = ";display:none";
+		selectionstring1 = "background-color:ghostwhite;display:none";
+		selectionstring2 = "background-color:beige;display:none";
+		selectionstring3 = null;
+		t_trialseat.UserId = -1;
+		IsLoadingOverlay = false;
+		StateHasChanged();
+	}
+	protected override async Task OnInitializedAsync()
+	{
+		onInit();
+	}
+	private async void onSubmit()
+	{
+		await JSRuntime.InvokeVoidAsync("onload");
+	}
+
+	//private async void offSubmit()
+	//{
+	//    await JSRuntime.InvokeVoidAsync("offload");
+	//}
+
+	private async void onUserAdd()
+	{
+		if (t_trialseat.UserId == -1) return;
+		// ボタン2度押し対策
+		buttonDisabled = true;
+		t_trialseat.TrialSeatId = 0;
+		t_trialseat.SeatId = t_trialseats.Where(u => u.TrialId == t_trialseat.TrialId).ToList().Count + 1;
+		t_trialseat.ProgressMidway = 0;
+		await Http.PostAsJsonAsync("api/TTrialSeats", t_trialseat);
+		buttonDisabled = false;
+		Update();
+		t_trialseat.UserId = -1;
+	}
+	private async void onUserDel()
+	{
+		if (t_tables.Where(t => t.TrialSeatId == t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Max(a => a.TrialSeatId)).ToList().Count != 0)
+		{
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "表右端のメンバーは既にデータが入っているため削除できません");
+			return;
+		}
+		if (await JSRuntime.InvokeAsync<int>(
+			"jsFunctions.confirm", "表右端のメンバーを削除してもよろしいですか？") == 0) return;
+
+		t_trialseat.TrialSeatId = t_trialseats.Where(u => u.TrialId == t_trialseat.TrialId).Max(a => a.TrialSeatId);
+		await Http.DeleteAsync($"api/TTrialSeats/{t_trialseats.Where(u => u.TrialId == t_trialseat.TrialId).Max(a => a.TrialSeatId)}");
+		Update();
+	}
+	private async void onScoreAdd()
+	{
+		int colcount = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).ToList().Count;
+		if (colcount < 4) return;
+
+		int n = 0;
+		int? sum_z = 0;
+		int? sum_c = -int.Parse(t_trial.StartReturn.Substring(0, t_trial.StartReturn.IndexOf("-"))) * 4 * 10;
+		int? sum_e = 0;
+		int? sum_d = 0;
+		int? sum_h = 0;
+		for (var i = 0; i < colcount; i++)
+		{
+			if (iz[i] == null && ic[i] == null && (id[i] == 0 || id[i] == null) && (ie[i] == 0 || ie[i] == null) && (ih[i] == 0 || ih[i] == null) && (!ig[i]))
+			{
+				n++;
+			}
+			if (iz[i] != null)
+			{
+				sum_z += iz[i];
+			}
+			if (ic[i] != null)
+			{
+				sum_c += ic[i];
+			}
+			if (id[i] != null)
+			{
+				sum_d += id[i];
+			}
+			if (ie[i] != null)
+			{
+				sum_e += ie[i];
+			}
+			if (ih[i] != null)
+			{
+				sum_h += ih[i];
+			}
+		}
+		if (n != colcount - 4 || sum_z != 0 || (sum_c != 0 && sum_c != -int.Parse(t_trial.StartReturn.Substring(0, t_trial.StartReturn.IndexOf("-"))) * 4 * 10) || sum_d != 0 || sum_e != 0 || sum_h != 0)
+		{
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "点数またはチップ増減、飛び賞増減、役満賞増減が正しく入力されていません");
+			return;
+		}
+
+		if (await JSRuntime.InvokeAsync<int>("jsFunctions.confirm", "卓データを追加しますか？") == 0) return;
+
+		// ボタン2度押し対策
+		buttonDisabled = true;
+
+		// 焼き鳥trueの数をカウント
+		int yakitoricount = 0;
+		for (var i = 0; i < colcount; i++)
+		{
+			if (ig[i]) yakitoricount++;
+		}
+
+		for (var i = 0; i < colcount; i++)
+		{
+			// 焼き鳥罰符による点数増減を計算
+			int? yakitoristate = null;
+			if (ig[i])
+			{
+				yakitoristate = (yakitoricount - 1) - 3;
+			}
+			else
+			{
+				yakitoristate = (yakitoricount == 0 ? null : yakitoricount);
+			}
+
+			if ((iz[i] != null && z1 == null) || (ic[i] != null && c1 == null))
+			{
+				b1 = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Where(a => a.SeatId == i + 1).Select(s => s.TrialSeatId).FirstOrDefault();
+				c1 = ic[i];
+				d1 = id[i];
+				e1 = ie[i];
+				g1 = yakitoristate;
+				h1 = ih[i];
+				z1 = iz[i];
+			}
+			else if ((iz[i] != null && z2 == null) || (ic[i] != null && c2 == null))
+			{
+				b2 = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Where(a => a.SeatId == i + 1).Select(s => s.TrialSeatId).FirstOrDefault();
+				c2 = ic[i];
+				d2 = id[i];
+				e2 = ie[i];
+				g2 = yakitoristate;
+				h2 = ih[i];
+				z2 = iz[i];
+			}
+			else if ((iz[i] != null && z3 == null) || (ic[i] != null && c3 == null))
+			{
+				b3 = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Where(a => a.SeatId == i + 1).Select(s => s.TrialSeatId).FirstOrDefault();
+				c3 = ic[i];
+				d3 = id[i];
+				e3 = ie[i];
+				g3 = yakitoristate;
+				h3 = ih[i];
+				z3 = iz[i];
+			}
+			else if ((iz[i] != null && z4 == null) || (ic[i] != null && c4 == null))
+			{
+				b4 = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Where(a => a.SeatId == i + 1).Select(s => s.TrialSeatId).FirstOrDefault();
+				c4 = ic[i];
+				d4 = id[i];
+				e4 = ie[i];
+				g4 = yakitoristate;
+				h4 = ih[i];
+				z4 = iz[i];
+			}
+		}
+
+		if (c1 != null && c2 != null && c3 != null && c4 != null)
+		{
+			int?[] c = new int?[] { c1, c2, c3, c4 };
+			int?[] d = new int?[] { d1, d2, d3, d4 };
+			int?[] e = new int?[] { e1, e2, e3, e4 };
+			int?[] g = new int?[] { g1, g2, g3, g4 };
+			int?[] h = new int?[] { h1, h2, h3, h4 };
+			int[] rank = new int[4];
+			int?[] sc = new int?[4];
+			int?[] scc = new int?[4];
+			int? topscore = 0;
+			int topcount = 0;
+			int secondcount = 0;
+			int thirdcount = 0;
+			int fourthcount = 0;
+			for (var i = 0; i < 4; i++)
+			{
+				rank[i] = 1;
+				for (var j = 0; j < 3; j++)
+				{
+					if (c[i] < c[(i + j + 1) % 4])
+					{
+						rank[i] += 1;
+					}
+				}
+				if (rank[i] != 1)
+				{
+					sc[i] = c[i] % 10 > 5 ? (c[i] + (10 - c[i] % 10)) / 10 : (c[i] - c[i] % 10) / 10;
+					switch (rank[i])
+					{
+						case 2:
+							secondcount += 1;
+							break;
+						case 3:
+							thirdcount += 1;
+							break;
+						case 4:
+							fourthcount += 1;
+							break;
+					}
+				}
+				else
+				{
+					sc[i] = 0;
+					topcount += 1;
+				}
+			}
+			for (var i = 0; i < 4; i++)
+			{
+				if (sc[i] == 0)
+				{
+					topscore = 100 - (sc[(i + 1) % 4] + sc[(i + 2) % 4] + sc[(i + 3) % 4]);
+					scc[i] = (topscore - (topscore % topcount)) / topcount;
+				}
+				else
+				{
+					scc[i] = sc[i];
+				}
+			}
+
+			// 最終持ち点をScoreに変換する
+			for (var i = 0; i < 4; i++)
+			{
+				var sp = new ScorePalam();
+				sp.rank = rank[i];
+				sp.score = scc[i];
+				sp.r_startreturn = int.Parse(t_trial.StartReturn.Substring(t_trial.StartReturn.IndexOf("-") + 1));
+				sp.chipsprice = t_trial.ChipsPrice;
+				sp.yakitoriprice = t_trial.YakitoriPrice;
+				sp.tobiprice = t_trial.TobiPrice;
+				sp.yakumanprice = t_trial.YakumanPrice;
+				sp.chipschange = e[i];
+				sp.yakitoristate = g[i];
+				sp.tobistate = h[i];
+				sp.yakumanstate = d[i];
+				sp.f_bonusbyranking = int.Parse(t_trial.BonusByRanking.Substring(0, t_trial.BonusByRanking.IndexOf("-")));
+				sp.b_bonusbyranking = int.Parse(t_trial.BonusByRanking.Substring(t_trial.BonusByRanking.IndexOf("-") + 1));
+				if (topcount == 1 && secondcount == 1 && thirdcount == 1 && fourthcount == 1)
+				{
+					scc[i] = ScoreCalc1234(sp);
+				}
+				else if (topcount == 2 && thirdcount == 1 && fourthcount == 1)
+				{
+					if (rank[i] == 3)
+					{
+						sp.score += (topscore % 2);
+					}
+					scc[i] = ScoreCalc1134(sp);
+				}
+				else if (topcount == 1 && secondcount == 2 && fourthcount == 1)
+				{
+					scc[i] = ScoreCalc1224(sp);
+				}
+				else if (topcount == 1 && secondcount == 1 && thirdcount == 2)
+				{
+					scc[i] = ScoreCalc1233(sp);
+				}
+				else if (topcount == 2 && thirdcount == 2)
+				{
+					scc[i] = ScoreCalc1133(sp);
+				}
+				else if (topcount == 1 && secondcount == 3)
+				{
+					scc[i] = ScoreCalc1222(sp);
+				}
+				else if (topcount == 3 && fourthcount == 1)
+				{
+					if (rank[i] == 4)
+					{
+						sp.score += (topscore % 3);
+					}
+					scc[i] = ScoreCalc1114(sp);
+				}
+			}
+			c1 = scc[0];
+			c2 = scc[1];
+			c3 = scc[2];
+			c4 = scc[3];
+
+			t_table.TableCountId = (t_tables.Join(t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new { t.TrialSeatId, t.TrialId, t.SeatId, s?.UserName }), u => u.TrialSeatId, k => k.TrialSeatId, (u, k) => new
+			{ u.TableId, u.TrialSeatId, k.TrialId, k.SeatId, k?.UserName, u.TableCountId }).Where(u => u.TrialId == t_trialseat.TrialId).ToList().Count / 4) + 1;
+			t_table.Rank = rank[0];
+			t_table.TrialSeatId = b1;
+			t_table.Score = c1;
+			t_table.ChipsChange = e1;
+			t_table.YakitoriState = g1;
+			t_table.TobiState = h1;
+			t_table.YakumanState = d1;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+			t_table.Rank = rank[1];
+			t_table.TrialSeatId = b2;
+			t_table.Score = c2;
+			t_table.ChipsChange = e2;
+			t_table.YakitoriState = g2;
+			t_table.TobiState = h2;
+			t_table.YakumanState = d2;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+			t_table.Rank = rank[2];
+			t_table.TrialSeatId = b3;
+			t_table.Score = c3;
+			t_table.ChipsChange = e3;
+			t_table.YakitoriState = g3;
+			t_table.TobiState = h3;
+			t_table.YakumanState = d3;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+			t_table.Rank = rank[3];
+			t_table.TrialSeatId = b4;
+			t_table.Score = c4;
+			t_table.ChipsChange = e4;
+			t_table.YakitoriState = g4;
+			t_table.TobiState = h4;
+			t_table.YakumanState = d4;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+		}
+		else if (z1 != null && z2 != null && z3 != null && z4 != null)
+		{
+			int?[] z = new int?[] { z1, z2, z3, z4 };
+			int[] rank = new int[4];
+			for (var i = 0; i < 4; i++)
+			{
+				rank[i] = 1;
+				for (var j = 0; j < 3; j++)
+				{
+					if (z[i] < z[(i + j + 1) % 4])
+					{
+						rank[i] += 1;
+					}
+				}
+			}
+
+			t_table.TableCountId = (t_tables.Join(t_trialseats.Join(t_users, t => t.UserId, s => s.UserId, (t, s) => new { t.TrialSeatId, t.TrialId, t.SeatId, s?.UserName }), u => u.TrialSeatId, k => k.TrialSeatId, (u, k) => new
+			{ u.TableId, u.TrialSeatId, k.TrialId, k.SeatId, k?.UserName, u.TableCountId }).Where(u => u.TrialId == t_trialseat.TrialId).ToList().Count / 4) + 1;
+			t_table.Rank = rank[0];
+			t_table.TrialSeatId = b1;
+			t_table.Score = z1;
+			t_table.ChipsChange = e1;
+			t_table.YakitoriState = g1;
+			t_table.TobiState = h1;
+			t_table.YakumanState = d1;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+			t_table.Rank = rank[1];
+			t_table.TrialSeatId = b2;
+			t_table.Score = z2;
+			t_table.ChipsChange = e2;
+			t_table.YakitoriState = g2;
+			t_table.TobiState = h2;
+			t_table.YakumanState = d2;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+			t_table.Rank = rank[2];
+			t_table.TrialSeatId = b3;
+			t_table.Score = z3;
+			t_table.ChipsChange = e3;
+			t_table.YakitoriState = g3;
+			t_table.TobiState = h3;
+			t_table.YakumanState = d3;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+			t_table.Rank = rank[3];
+			t_table.TrialSeatId = b4;
+			t_table.Score = z4;
+			t_table.ChipsChange = e4;
+			t_table.YakitoriState = g4;
+			t_table.TobiState = h4;
+			t_table.YakumanState = d4;
+			await Http.PostAsJsonAsync("api/TTables", t_table);
+		}
+
+		buttonDisabled = false;
+		Update();
+		onScoreClear();
+	}
+	private void onScoreClear()
+	{
+		for (var i = 0; i < t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).ToList().Count; i++)
+		{
+			ic[i] = null;
+			id[i] = null;
+			ie[i] = null;
+			ig[i] = false;
+			ih[i] = null;
+			iz[i] = null;
+		}
+		c1 = null;
+		c2 = null;
+		c3 = null;
+		c4 = null;
+		d1 = null;
+		d2 = null;
+		d3 = null;
+		d4 = null;
+		e1 = null;
+		e2 = null;
+		e3 = null;
+		e4 = null;
+		g1 = null;
+		g2 = null;
+		g3 = null;
+		g4 = null;
+		h1 = null;
+		h2 = null;
+		h3 = null;
+		h4 = null;
+	}
+	private async void onTrialAdd()
+	{
+		if (await JSRuntime.InvokeAsync<int>("jsFunctions.confirm", "新規ページを作成しますか？") == 0) return;
+		if (t_trials.Count == 0)
+		{
+			t_trial.StartReturn = "25-30";
+			t_trial.BonusByRanking = "10-30";
+			t_trial.ChipsPrice = 0;
+			t_trial.YakitoriPrice = 0;
+			t_trial.TobiPrice = 0;
+			t_trial.YakumanPrice = 0;
+		}
+		else
+		{
+			t_trial.StartReturn = t_trials.OrderByDescending(a => a.TrialId).Select(a => a.StartReturn).FirstOrDefault();
+			t_trial.BonusByRanking = t_trials.OrderByDescending(a => a.TrialId).Select(a => a.BonusByRanking).FirstOrDefault();
+			t_trial.ChipsPrice = t_trials.OrderByDescending(a => a.TrialId).Select(a => a.ChipsPrice).FirstOrDefault();
+			t_trial.YakitoriPrice = t_trials.OrderByDescending(a => a.TrialId).Select(a => a.YakitoriPrice).FirstOrDefault();
+			t_trial.TobiPrice = t_trials.OrderByDescending(a => a.TrialId).Select(a => a.TobiPrice).FirstOrDefault();
+			t_trial.YakumanPrice = t_trials.OrderByDescending(a => a.TrialId).Select(a => a.YakumanPrice).FirstOrDefault();
+		}
+		t_trial.TrialDateTime = DateTime.UtcNow.ToJst();
+		var res = await this.Http.PostAsJsonAsync("api/TTrials", t_trial);
+		t_trial.TrialDateTime = null;
+		t_trial.StartReturn = null;
+		t_trial.BonusByRanking = null;
+		t_trial.ChipsPrice = null;
+		t_trial.YakitoriPrice = null;
+		t_trial.TobiPrice = null;
+		t_trial.YakumanPrice = null;
+		onInit();
+	}
+	private async void onTrialDel()
+	{
+		if (t_trialseats.Where(b => b.TrialId == t_trialseat.TrialId).ToList().Count != 0)
+		{
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "現在のページは既にデータが入っているため削除できません");
+			return;
+		}
+		if (await JSRuntime.InvokeAsync<int>("jsFunctions.confirm", "現在のページを削除してもよろしいですか？") == 0) return;
+		var res = await Http.DeleteAsync($"api/TTrials/{t_trialseat.TrialId}");
+		onInit();
+	}
+	private bool IsButtonDisabled()
+	{
+		if (t_trialseats.Where(b => b.TrialId == t_trialseat.TrialId).ToList().Count > 8)
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	// 対局パラメータ更新
+	private async void onTrialUpdate()
+	{
+		if (!t_trials.Any())
+		{
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "はじめに対局を作成してください");
+			return;
+		}
+
+		if (_trialdatetime == null)
+		{
+			t_trial.TrialDateTime = t_trials.Where(a => a.TrialId == t_trial.TrialId).Select(a => a.TrialDateTime).FirstOrDefault();
+		}
+		else
+		{
+			t_trial.TrialDateTime = _trialdatetime;
+		}
+
+		if (_startreturn == null || _startreturn == "")
+		{
+			t_trial.StartReturn = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.StartReturn).FirstOrDefault();
+		}
+		else
+		{
+			t_trial.StartReturn = _startreturn;
+		}
+
+		if (_bonusbyranking == null || _bonusbyranking == "")
+		{
+			t_trial.BonusByRanking = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.BonusByRanking).FirstOrDefault();
+		}
+		else
+		{
+			t_trial.BonusByRanking = _bonusbyranking;
+		}
+
+		if (_chipsprice == null)
+		{
+			t_trial.ChipsPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.ChipsPrice).FirstOrDefault();
+		}
+		else
+		{
+			t_trial.ChipsPrice = _chipsprice;
+		}
+
+		if (_yakitoriprice == null)
+		{
+			t_trial.YakitoriPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.YakitoriPrice).FirstOrDefault();
+		}
+		else
+		{
+			t_trial.YakitoriPrice = _yakitoriprice;
+		}
+
+		if (_tobiprice == null)
+		{
+			t_trial.TobiPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.TobiPrice).FirstOrDefault();
+		}
+		else
+		{
+			t_trial.TobiPrice = _tobiprice;
+		}
+
+		if (_yakumanprice == null)
+		{
+			t_trial.YakumanPrice = t_trials.Where(a => a.TrialId == t_trialseat.TrialId).Select(a => a.YakumanPrice).FirstOrDefault();
+		}
+		else
+		{
+			t_trial.YakumanPrice = _yakumanprice;
+		}
+
+		try
+		{
+			// 更新処理
+			await Http.PutAsJsonAsync($"api/TTrials/{t_trial.TrialId}", t_trial);
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "対局パラメータを変更しました");
+			// リストを更新
+			onInit();
+			_trialdatetime = null;
+			_startreturn = null;
+			_bonusbyranking = null;
+			_calculationmethod = null;
+			_chipsprice = null;
+			_yakitoriprice = null;
+			_tobiprice = null;
+			_yakumanprice = null;
+		}
+		catch
+		{
+			await JSRuntime.InvokeAsync<string>("jsFunctions.alert", "対局パラメータが正しく入力されていないため変更できません");
+			return;
+		}
+	}
+
+	// 調整値反映メソッド（反映ボタンクリックイベント）
+	private async void onProgressEdit()
+	{        
+		for (var i = 0; i < t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).OrderBy(a => a.SeatId).ToList().Count; i++)
+		{
+			t_trialseat.TrialSeatId = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Where(a => a.SeatId == i + 1).Select(a => a.TrialSeatId).FirstOrDefault();
+			t_trialseat.SeatId = i + 1;
+			t_trialseat.UserId = t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).Where(a => a.SeatId == i + 1).Select(a => a.UserId).FirstOrDefault();
+			t_trialseat.ProgressMidway = ia[i] ?? 0;
+			await Http.PutAsJsonAsync($"api/TTrialSeats/{t_trialseat.TrialSeatId}", t_trialseat);
+			ia[i] = null;
+		}
+		t_trialseat.TrialSeatId = 0;
+		t_trialseat.SeatId = 0;
+		t_trialseat.UserId = -1;
+		t_trialseat.ProgressMidway = 0;
+		Update();
+	}
+
+	// 集計結果のみ入力、調整行、飛び賞・役満賞入力行表示制御メソッド
+	private void CheckSelection0()
+	{
+		if (afterscoreRow == true)
+		{
+			selectionstring0 = ";display:none";
+			selectionstring3 = null;
+			checkDisabled = false;
+		}
+		else
+		{
+			selectionstring0 = null;
+			selectionstring3 = ";display:none";
+			selectionstring2 = "background-color:beige;display:none";
+			tobiyakumanRow = false;
+			checkDisabled = true;
+		}
+		for (var i = 0; i < t_trialseats.Where(a => a.TrialId == t_trialseat.TrialId).ToList().Count; i++)
+		{
+			ic[i] = null;
+			id[i] = null;
+			ie[i] = null;
+			ig[i] = false;
+			ih[i] = null;
+			iz[i] = null;
+		}
+	}
+	private void CheckSelection1()
+	{
+		if (adjustmentRow == true)
+		{
+			selectionstring1 = "background-color:ghostwhite;display:none";
+		}
+		else
+		{
+			selectionstring1 = "background-color:ghostwhite";
+		}
+	}
+	private void CheckSelection2()
+	{
+		if (tobiyakumanRow == true)
+		{
+			selectionstring2 = "background-color:beige;display:none";
+		}
+		else
+		{
+			selectionstring2 = "background-color:beige";
+		}
+	}
+
+	// スコア計算で使用する各関数
+	public static int? ScoreCalc1234(ScorePalam sp)
+	{
+		int?[] c = new int?[4];
+		for (var i = 0; i < 4; i++)
+		{
+			c[i] = 0;
+		}
+		switch (sp.rank)
+		{
+			case 1:
+				c[0] = (sp.halfcalc() + sp.b_bonusbyranking + 20);
+				break;
+			case 2:
+				c[1] = (sp.halfcalc() + sp.f_bonusbyranking);
+				break;
+			case 3:
+				c[2] = (sp.halfcalc() - sp.f_bonusbyranking);
+				break;
+			case 4:
+				c[3] = (sp.halfcalc() - sp.b_bonusbyranking);
+				break;
+		}
+		return c[0] + c[1] + c[2] + c[3];
+	}
+	public static int? ScoreCalc1114(ScorePalam sp)
+	{
+		int?[] c = new int?[4];
+		for (var i = 0; i < 4; i++)
+		{
+			c[i] = 0;
+		}
+		switch (sp.rank)
+		{
+			case 1:
+				c[0] = (sp.halfcalc() + (sp.b_bonusbyranking + 20) / 3);
+				break;
+			case 2:
+				c[1] = 0;
+				break;
+			case 3:
+				c[2] = 0;
+				break;
+			case 4:
+				c[3] = (sp.halfcalc() - sp.b_bonusbyranking) - (sp.halfcalc() - sp.b_bonusbyranking) % 3;
+				break;
+		}
+		return c[0] + c[1] + c[2] + c[3];
+	}
+	public static int? ScoreCalc1133(ScorePalam sp)
+	{
+		int?[] c = new int?[4];
+		for (var i = 0; i < 4; i++)
+		{
+			c[i] = 0;
+		}
+		switch (sp.rank)
+		{
+			case 1:
+				c[0] = (sp.halfcalc() + (sp.b_bonusbyranking + sp.f_bonusbyranking + 20) / 2);
+				break;
+			case 2:
+				c[1] = 0;
+				break;
+			case 3:
+				c[2] = (sp.halfcalc() - (sp.f_bonusbyranking + sp.b_bonusbyranking) / 2 + (sp.f_bonusbyranking + sp.b_bonusbyranking) % 2);
+				break;
+			case 4:
+				c[3] = 0;
+				break;
+		}
+		return c[0] + c[1] + c[2] + c[3];
+	}
+	public static int? ScoreCalc1134(ScorePalam sp)
+	{
+		int?[] c = new int?[4];
+		for (var i = 0; i < 4; i++)
+		{
+			c[i] = 0;
+		}
+		switch (sp.rank)
+		{
+			case 1:
+				c[0] = (sp.halfcalc() + (sp.b_bonusbyranking + sp.f_bonusbyranking + 20) / 2);
+				break;
+			case 2:
+				c[1] = 0;
+				break;
+			case 3:
+				c[2] = (sp.halfcalc() - sp.f_bonusbyranking + (sp.f_bonusbyranking + sp.b_bonusbyranking) % 2);
+				break;
+			case 4:
+				c[3] = (sp.halfcalc() - sp.b_bonusbyranking + (sp.f_bonusbyranking + sp.b_bonusbyranking) % 2);
+				break;
+		}
+		return c[0] + c[1] + c[2] + c[3];
+	}
+	public static int? ScoreCalc1224(ScorePalam sp)
+	{
+		int?[] c = new int?[4];
+		for (var i = 0; i < 4; i++)
+		{
+			c[i] = 0;
+		}
+		switch (sp.rank)
+		{
+			case 1:
+				c[0] = (sp.halfcalc() + sp.b_bonusbyranking + 20);
+				break;
+			case 2:
+				c[1] = sp.halfcalc();
+				break;
+			case 3:
+				c[2] = 0;
+				break;
+			case 4:
+				c[3] = (sp.halfcalc() - sp.b_bonusbyranking);
+				break;
+		}
+		return c[0] + c[1] + c[2] + c[3];
+	}
+	public static int? ScoreCalc1222(ScorePalam sp)
+	{
+		int?[] c = new int?[4];
+		for (var i = 0; i < 4; i++)
+		{
+			c[i] = 0;
+		}
+		switch (sp.rank)
+		{
+			case 1:
+				c[0] = (sp.halfcalc() + sp.b_bonusbyranking + 20 - (sp.b_bonusbyranking % 3));
+				break;
+			case 2:
+				c[1] = (sp.halfcalc() - sp.b_bonusbyranking / 3);
+				break;
+			case 3:
+				c[2] = 0;
+				break;
+			case 4:
+				c[3] = 0;
+				break;
+		}
+		return c[0] + c[1] + c[2] + c[3];
+	}
+	public static int? ScoreCalc1233(ScorePalam sp)
+	{
+		int?[] c = new int?[4];
+		for (var i = 0; i < 4; i++)
+		{
+			c[i] = 0;
+		}
+		switch (sp.rank)
+		{
+			case 1:
+				c[0] = (sp.halfcalc() + sp.b_bonusbyranking + 20 - (sp.f_bonusbyranking + sp.b_bonusbyranking) % 2);
+				break;
+			case 2:
+				c[1] = (sp.halfcalc() + sp.f_bonusbyranking - (sp.f_bonusbyranking + sp.b_bonusbyranking) % 2);
+				break;
+			case 3:
+				c[2] = (sp.halfcalc() - (sp.f_bonusbyranking + sp.b_bonusbyranking) / 2);
+				break;
+			case 4:
+				c[3] = 0;
+				break;
+		}
+		return c[0] + c[1] + c[2] + c[3];
+	}
+}

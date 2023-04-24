@@ -1,0 +1,85 @@
+﻿@page "/"
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime;
+@inject SignOutSessionStateManager SignOutManager
+
+<PageTitle>ozarin</PageTitle>
+
+<div id="container">
+
+	<div id="contents">
+
+		<aside class="inner first"><img src="images/1986152_m.jpg" alt=""></aside>
+
+		<section id="new" class="inner">
+			<h2>更新情報・お知らせ</h2>
+			<dl>
+				<dt>2023/04/15</dt>
+				<dd>ozarinリリース<span class="newicon">NEW</span></dd>
+			</dl>
+		</section>
+
+		<section class="inner">
+
+			<h2>4人打ち麻雀専用スコア集計アプリ</h2>
+			<h3>※ウェブブラウザのみでご利用いただくことができます。</h3>
+
+			<span class="color1">■<strong>対応している主な機能</strong></span>
+			<ul>
+				<li>25,000開局-30,000返し、20,000開局-25,000返し</li>
+				<li>ウマ5-10、ウマ10-20、ウマ10-30</li>
+				<li>チップ</li>
+				<li>焼き鳥</li>
+				<li>飛び賞</li>
+				<li>役満賞</li>
+				<li>過去100試合のスコアデータの閲覧・編集が可能</li>
+				<li>過去全試合の戦績表が閲覧可能（期間フィルター機能あり）</li>
+				<li>ユーザー登録（40人まで）</li>
+			</ul><br />
+
+			<span class="color1">■<strong>ご利用にあたって</strong></span>
+			<ul class="check">
+				<li class="check">身内戦や常連相手との試合でご利用ください。</li>
+				<li class="check">サービスをご利用いただくには、月額220円(税込み)の課金が必要です。</li>
+				<li class="check">ナビゲーションメニューの「My subscription」よりいつでもキャンセル（解約）可能です。</li>
+			</ul><br />
+
+			<span class="color1">■<strong>アプリの始め方</strong></span>
+			<ol style="padding-left:25px">
+				<li>下の「アプリに移動する」ボタンをクリック（タップ）してください。</li>
+				<li>サインイン画面にて今すぐサインアップをクリック（タップ）してアカウントを作成してください。既にサインインしている場合はスキップされます。</li>
+				<li>お支払いページにてサブスクリプションにご登録ください。既に登録されている場合はスキップされます。</li>
+				<li>スコアボード画面に切り替わったらアプリの利用が可能です。</li>
+			</ol>
+
+		</section>
+
+		<section class="inner">
+			<button class="buttontop" @onclick="onSubmit">アプリに移動する</button>
+		</section>
+
+	</div>
+	<!--/#contents-->
+
+</div>
+<!--/#container-->
+
+<!--ページの上部に戻る「↑」ボタン-->
+<p class="nav-fix-pos-pagetop"><a href="#">↑</a></p>
+
+<!--メニュー開閉ボタン-->
+<div id="menubar_hdr" class="close"></div>
+
+@code{
+	private void onSubmit()
+	{
+		NavigationManager.NavigateTo("scoreboard");
+	}
+	private async Task BeginLogout(MouseEventArgs args)
+	{
+		await SignOutManager.SetSignOutState();
+		NavigationManager.NavigateTo("authentication/logout");
+	}
+}
